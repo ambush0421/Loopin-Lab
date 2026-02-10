@@ -60,10 +60,10 @@
     ]
   },
   "session": {
-    "startedAt": "2026-02-10T13:01:25.087Z",
+    "startedAt": "2026-02-10T17:12:47.979Z",
     "onboardingCompleted": true,
-    "lastActivity": "2026-02-10T13:01:25.087Z"
+    "lastActivity": "2026-02-10T17:12:47.979Z"
   },
-  "_snapshotTimestamp": "2026-02-10T16:00:46.618Z",
+  "_snapshotTimestamp": "2026-02-10T17:19:55.313Z",
   "_reason": "pre-compress"
 }
