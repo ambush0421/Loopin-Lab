@@ -4,7 +4,8 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import Link from 'next/link';
-import { Loader2, FileText, Trash2, Calendar, MapPin, Search } from 'lucide-react';
+import { Loader2, FileText, Trash2, Calendar, MapPin, Search, Calculator } from 'lucide-react';
+import { ExpertCalculator } from '@/components/dashboard/ExpertCalculator';
 
 interface SavedReport {
   id: string;
@@ -97,6 +98,17 @@ export default function DashboardPage() {
             + 새 보고서 만들기
           </Link>
         </header>
+
+        {/* 전문가용 금융 시뮬레이터 섹션 */}
+        <section className="mb-12">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="bg-slate-900 p-2 rounded-xl">
+              <Calculator className="w-5 h-5 text-blue-400" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-800">전문가용 금융 시뮬레이터</h2>
+          </div>
+          <ExpertCalculator />
+        </section>
 
         {/* Search Filter */}
         <div className="mb-6 relative">
