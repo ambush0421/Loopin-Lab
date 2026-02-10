@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import DaumPostcodeEmbed from 'react-daum-postcode';
 import axios from 'axios';
 import { BuildingReport } from '@/types/building';
@@ -140,7 +141,13 @@ export default function Home() {
           <div className="flex gap-2">
             {user ? (
               <div className="flex items-center gap-3">
-                <span className="text-xs text-gray-500 font-medium">{user.email}</span>
+                <Link
+                  href="/dashboard"
+                  className="text-sm font-bold text-gray-600 hover:text-blue-600 transition-colors mr-2"
+                >
+                  내 보관함
+                </Link>
+                <span className="text-xs text-gray-500 font-medium hidden sm:inline">{user.email}</span>
                 <button
                   onClick={handleLogout}
                   className="p-2 text-gray-400 hover:text-red-500 transition-colors"

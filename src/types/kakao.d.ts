@@ -1,0 +1,20 @@
+declare module 'react-kakao-maps-sdk' {
+  export const Map: any;
+  export const MapMarker: any;
+  export const CustomOverlayMap: any;
+  export const MapTypeId: any;
+  export const RoadView: any;
+  export const RoadViewMarker: any;
+  export const MapControl: any;
+  export const MapTypeControl: any;
+  export const ZoomControl: any;
+  export const MapInfoWindow: any;
+  export const MapCircle: any;
+  export const MapPolyline: any;
+  export const MapPolygon: any;
+  export const MapRectangle: any;
+  export const MapEllipse: any;
+  export const AbstractCanvas: any;
+  export const DrawingManager: any;
+  export const Toolbox: any;
+}
