@@ -1,4 +1,5 @@
 // @ts-nocheck
+'use client';
 import React from 'react';
 import { BuildingReport, ReportType } from '@/types/building';
 import { AlertTriangle, Building, MapPin, Calendar, Ruler, Car, TrendingUp, Landmark, ShieldCheck, Calculator, BarChart3, PieChart, Coins, Home, Activity, Map as MapIcon } from 'lucide-react';
