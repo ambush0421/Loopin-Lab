@@ -64,6 +64,19 @@ type UnitRow = Record<string, unknown> & {
   etcPurps?: string;
   mainPurpsCdNm?: string;
 };
+type FloorAreaRow = {
+  _uid: string;
+  flrNo: number;
+  flrGbCd?: string;
+  flrGbCdNm?: string;
+  area: string | number;
+  etcPurps?: string;
+  mainPurpsCdNm?: string;
+};
+type FloorAreaMeta = {
+  source: 'api' | 'unit_aggregate' | 'none';
+  note: string;
+};
 type TransactionMarker = {
   lat: number;
   lng: number;
@@ -108,17 +121,16 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<BuildingData | null>(null);
   const [units, setUnits] = useState<UnitRow[]>([]);
+  const [floorAreas, setFloorAreas] = useState<FloorAreaRow[]>([]);
+  const [floorAreaMeta, setFloorAreaMeta] = useState<FloorAreaMeta>({
+    source: 'none',
+    note: '층별 면적 데이터가 없습니다.',
+  });
   const [marketPrice, setMarketPrice] = useState<MarketPriceData | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [address, setAddress] = useState('');
   const [coords, setCoords] = useState<{ lat: number, lng: number } | undefined>(undefined);
   const [isQuotationOpen, setIsQuotationOpen] = useState(false);
-  const [params, setParams] = useState<SearchParamsState>({
-    sigunguCd: '',
-    bjdongCd: '',
-    bun: '',
-    ji: ''
-  });
   const [addressInput, setAddressInput] = useState('');
   const [showPostcode, setShowPostcode] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -152,7 +164,6 @@ export default function Home() {
     const { params: p, address: a } = pendingSearch;
     setPendingSearch(null);  // 한 번만 실행
     fetchAllData(p, a);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingSearch]);
 
   // Daum Postcode oncomplete 핸들러
@@ -182,10 +193,14 @@ export default function Home() {
 
     setAddress(fullAddress);
     setAddressInput(fullAddress);
-    setParams(newParams);
     setSelectedIds(new Set());
     setErrorMsg(null);
     setCoords(undefined);
+    setFloorAreas([]);
+    setFloorAreaMeta({
+      source: 'none',
+      note: '층별 면적 데이터가 없습니다.',
+    });
 
     // 좌표는 조회와 병렬 처리해 지도 표시를 지연시키지 않도록 즉시 지도 데이터 조회를 시작
     void (async () => {
@@ -238,10 +253,53 @@ export default function Home() {
     }, 50);
   }, [daumReady, handlePostcodeComplete]);
 
+  // 건물명 입력 시에도 주소 검색이 가능하도록, 먼저 서버 geocode에서 주소를 보정
+  const resolveSearchAddress = useCallback(async (rawQuery: string): Promise<string> => {
+    const query = rawQuery.trim();
+    if (!query) return '';
+
+    try {
+      const res = await fetch(
+        toApiUrl(`/api/geocode?address=${encodeURIComponent(query)}`),
+        {
+          headers: { 'Accept': 'application/json' },
+          cache: 'no-store',
+          redirect: 'error',
+        },
+      );
+      if (!res.ok) return query;
+
+      const data = await res.json();
+      const resolvedAddress =
+        typeof data?.resolvedAddress === 'string'
+          ? data.resolvedAddress.trim()
+          : '';
+      return resolvedAddress || query;
+    } catch {
+      return query;
+    }
+  }, [toApiUrl]);
+
+  const handleSearchSubmit = useCallback(async (inputQuery?: string) => {
+    const raw = typeof inputQuery === 'string' ? inputQuery : addressInput;
+    const query = raw.trim();
+    if (!query) return;
+
+    setErrorMsg(null);
+    const resolvedQuery = await resolveSearchAddress(query);
+    if (resolvedQuery && resolvedQuery !== addressInput) {
+      setAddressInput(resolvedQuery);
+    }
+    openPostcodeEmbed(resolvedQuery || query);
+  }, [addressInput, openPostcodeEmbed, resolveSearchAddress]);
+
   // 외부 클릭 시 postcode 닫기
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (searchWrapperRef.current && !searchWrapperRef.current.contains(event.target as Node)) {
+      const targetNode = event.target as Node;
+      const isInSearch = !!searchWrapperRef.current?.contains(targetNode);
+      const isInPostcode = !!postcodeRef.current?.contains(targetNode);
+      if (!isInSearch && !isInPostcode) {
         setShowPostcode(false);
       }
     };
@@ -367,12 +425,48 @@ export default function Home() {
       setData(buildingData);
 
       // 2단계: 호실/시세 정보 (선택) - 병렬 호출
-      const [unitsResult, marketResult] = await Promise.all([
+      const floorQuery = (() => {
+        const dongNmRaw = String(buildingData.dongNm ?? '').trim();
+        if (!dongNmRaw) return query;
+        return `${query}&dongNm=${encodeURIComponent(dongNmRaw)}`;
+      })();
+
+      const [unitsResult, marketResult, floorResult] = await Promise.all([
         safeFetch(`/api/building-units?${query}`, '호실 정보'),
-        safeFetch(`/api/market-price?${query}`, '시세 정보')
+        safeFetch(`/api/market-price?${query}`, '시세 정보'),
+        safeFetch(`/api/building-floors?${floorQuery}`, '층별 면적')
       ]);
 
       setMarketPrice(isFetchErrorResult(marketResult) ? null : (marketResult as MarketPriceData));
+
+      const normalizeFloorDecimal = (value: unknown): string => {
+        const raw = String(value ?? '').replace(/,/g, '').trim();
+        if (!raw) return '0';
+        if (/^-?\d+(\.\d+)?$/.test(raw)) return raw;
+        const parsed = Number(raw);
+        return Number.isFinite(parsed) ? parsed.toString() : '0';
+      };
+      const normalizeFloorText = (value: unknown): string => String(value ?? '').trim();
+      const normalizedFloorAreasFromApi = (() => {
+        if (isFetchErrorResult(floorResult)) return [];
+        const payload = floorResult as { floors?: unknown };
+        if (!Array.isArray(payload.floors)) return [];
+        return payload.floors
+          .filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
+          .map((item, index) => {
+            const floorNo = Number(item.flrNo ?? 0) || 0;
+            return {
+              _uid: String(item._uid ?? `${floorNo}-${index}`),
+              flrNo: floorNo,
+              flrGbCd: normalizeFloorText(item.flrGbCd),
+              flrGbCdNm: normalizeFloorText(item.flrGbCdNm),
+              area: normalizeFloorDecimal(item.area),
+              etcPurps: normalizeFloorText(item.etcPurps),
+              mainPurpsCdNm: normalizeFloorText(item.mainPurpsCdNm),
+            };
+          })
+          .filter((item) => item.flrNo !== 0 || item.area !== '0');
+      })();
 
       const unitsPayload = (!isFetchErrorResult(unitsResult) ? unitsResult : null) as
         | { response?: { body?: { items?: { item?: unknown } } } }
@@ -403,9 +497,28 @@ export default function Home() {
 
       const normalizeUnitText = (value: unknown): string => String(value ?? '').trim();
       const normalizeUnitNumber = (value: unknown): number => Number(value ?? 0) || 0;
-      const SHARED_FACILITY_KEYWORDS = ['계단실', '기계실', '전기실'];
+      const SHARED_FACILITY_KEYWORDS = [
+        '계단실',
+        '기계실',
+        '전기실',
+        '층별공용',
+        '공용부분',
+        '공유면적',
+        '복도',
+        '홀',
+        '로비',
+        '화장실',
+        '승강기',
+        '엘리베이터',
+        'eps',
+        'ps',
+        '덕트',
+        '주차램프',
+        '램프',
+        '공용',
+      ];
       const isSharedFacilityPurpose = (value: unknown): boolean => {
-        const normalized = normalizeUnitText(value).replace(/\s+/g, '');
+        const normalized = normalizeUnitText(value).replace(/[\s()\-_/.,]/g, '').toLowerCase();
         if (!normalized) return false;
         return SHARED_FACILITY_KEYWORDS.some((keyword) => normalized.includes(keyword));
       };
@@ -420,14 +533,22 @@ export default function Home() {
         if (!currentShared && candidateShared) return current;
         return current.length >= candidate.length ? current : candidate;
       };
-      const resolvePurpose = (etcRaw: unknown, mainRaw: unknown): string => {
+      const resolvePurpose = (
+        etcRaw: unknown,
+        mainRaw: unknown,
+        buildingMainRaw?: unknown,
+      ): string => {
         const etc = normalizeUnitText(etcRaw);
         const main = normalizeUnitText(mainRaw);
-        if (!etc) return main;
+        const buildingMain = normalizeUnitText(buildingMainRaw);
+        if (!etc) return main || buildingMain;
         if (isSharedFacilityPurpose(etc) && main && !isSharedFacilityPurpose(main)) {
           return main;
         }
-        return etc || main;
+        if (isSharedFacilityPurpose(etc) && buildingMain && !isSharedFacilityPurpose(buildingMain)) {
+          return buildingMain;
+        }
+        return etc || main || buildingMain;
       };
       const getHoFloorCandidate = (hoNm: string): number | null => {
         const normalized = hoNm.replace(/\s+/g, '').replace(/호$/u, '');
@@ -527,7 +648,11 @@ export default function Home() {
           const normalizedFlrGbCd = shouldTreatAsGroundFloor ? '20' : flrGbCd;
           const flrNo = normalizedFlrGbCd === '10' ? -rawFlrNo : rawFlrNo;
           const contractArea = addDecimalStrings(unit.exclusiveArea, unit.commonArea);
-          const purpose = resolvePurpose(unit.etcPurps, unit.mainPurpsCdNm);
+          const purpose = resolvePurpose(
+            unit.etcPurps,
+            unit.mainPurpsCdNm,
+            buildingData.mainPurpsCdNm,
+          );
           return {
             ...unit.raw,
             flrNo,
@@ -544,6 +669,62 @@ export default function Home() {
         });
 
       setUnits(processedUnits);
+
+      const fallbackFloorAreasFromUnits = (() => {
+        const floorMap = new Map<
+          number,
+          {
+            flrNo: number;
+            flrGbCd: string;
+            area: string;
+          }
+        >();
+
+        processedUnits.forEach((unit) => {
+          const flrNo = Number(unit.flrNo) || 0;
+          const existing = floorMap.get(flrNo) ?? {
+            flrNo,
+            flrGbCd: normalizeUnitText(unit.flrGbCd),
+            area: '0',
+          };
+          existing.area = addDecimalStrings(
+            existing.area,
+            normalizeUnitDecimal(unit.contractArea ?? unit.area),
+          );
+          floorMap.set(flrNo, existing);
+        });
+
+        return Array.from(floorMap.values())
+          .sort((a, b) => b.flrNo - a.flrNo)
+          .map((item, index) => ({
+            _uid: `${item.flrNo}-fallback-${index}`,
+            flrNo: item.flrNo,
+            flrGbCd: item.flrGbCd,
+            area: item.area,
+            etcPurps: '',
+            mainPurpsCdNm: '',
+          }));
+      })();
+
+      if (normalizedFloorAreasFromApi.length > 0) {
+        setFloorAreas(normalizedFloorAreasFromApi);
+        setFloorAreaMeta({
+          source: 'api',
+          note: '건축물대장 층별개요 원본입니다.',
+        });
+      } else if (fallbackFloorAreasFromUnits.length > 0) {
+        setFloorAreas(fallbackFloorAreasFromUnits);
+        setFloorAreaMeta({
+          source: 'unit_aggregate',
+          note: '층별개요 미제공으로 호실 계약면적 합산값을 표기합니다.',
+        });
+      } else {
+        setFloorAreas([]);
+        setFloorAreaMeta({
+          source: 'none',
+          note: '공공데이터에서 층별개요와 호실면적이 모두 제공되지 않아 자동 산출이 불가합니다.',
+        });
+      }
 
       // 히스토리 저장 (params/address 포함 - 검색목록에서 재조회 가능하도록)
       type HistoryItem = {
@@ -634,7 +815,9 @@ export default function Home() {
             <LandingHero
               addressInput={addressInput}
               setAddressInput={setAddressInput}
-              onSearch={(query) => openPostcodeEmbed(query)}
+              onSearch={(query) => {
+                void handleSearchSubmit(query);
+              }}
               showPostcode={showPostcode}
               postcodeRef={postcodeRef}
               onClosePostcode={() => setShowPostcode(false)}
@@ -698,6 +881,8 @@ export default function Home() {
         <SelectionPage
           buildingData={data}
           units={units}
+          floorAreas={floorAreas}
+          floorAreaMeta={floorAreaMeta}
           address={address}
           coords={coords}
           transactions={marketPrice?.transactions}
@@ -707,6 +892,11 @@ export default function Home() {
           onBack={() => {
             setData(null);
             setUnits([]);
+            setFloorAreas([]);
+            setFloorAreaMeta({
+              source: 'none',
+              note: '층별 면적 데이터가 없습니다.',
+            });
             setAddress('');
             setSelectedIds(new Set());
             setIsQuotationOpen(false);
@@ -714,7 +904,9 @@ export default function Home() {
             setErrorMsg(null);
           }}
           onGenerateQuote={() => setIsQuotationOpen(true)}
-          onSearch={() => openPostcodeEmbed(addressInput.trim() || undefined)}
+          onSearch={() => {
+            void handleSearchSubmit(addressInput);
+          }}
           addressInput={addressInput}
           setAddressInput={setAddressInput}
           showPostcode={showPostcode}

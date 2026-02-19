@@ -12,16 +12,67 @@ interface RequestItem {
   cost?: number;
 }
 
+type ReportType = 'LEASE' | 'PURCHASE' | 'INVEST';
+type WeightInput = Partial<{
+  costScore: number;
+  areaScore: number;
+  parkingScore: number;
+  modernityScore: number;
+}>;
+
+type BuildingFetchResult =
+  | { error: true }
+  | {
+      id: string;
+      name: string;
+      address: string;
+      metrics: {
+        cost: number;
+        area: number;
+        parking: number;
+        year: number;
+        violation: boolean;
+        marketAvgPyung: number;
+      };
+      raw: Record<string, unknown>;
+    };
+
+type AnalysisBuilding = Record<string, unknown> & {
+  metrics: {
+    violation?: boolean;
+    year?: number;
+  };
+  analysis: {
+    score: number;
+  };
+};
+
+type AnalysisResult = {
+  weights: WeightInput;
+  bestIndex: number;
+  reasoning: string;
+  buildings: AnalysisBuilding[];
+};
+
+function toNumber(value: unknown): number {
+  const num = Number(value ?? 0);
+  return Number.isFinite(num) ? num : 0;
+}
+
 export async function POST(request: NextRequest) {
   const startTime = performance.now();
   try {
-    const body = await request.json();
-    const { type, items, weights, currentCost }: { 
-      type: 'LEASE' | 'PURCHASE' | 'INVEST', 
-      items: RequestItem[],
-      weights?: any,
-      currentCost?: number
-    } = body;
+    const body = (await request.json()) as {
+      type?: ReportType;
+      items?: RequestItem[];
+      weights?: WeightInput;
+      currentCost?: number;
+    };
+    const type: ReportType =
+      body.type === 'PURCHASE' || body.type === 'INVEST' ? body.type : 'LEASE';
+    const items = Array.isArray(body.items) ? body.items : [];
+    const weights = body.weights;
+    const currentCost = typeof body.currentCost === 'number' ? body.currentCost : 1000;
 
     if (!items || items.length < 1) {
       return NextResponse.json({ error: '최소 하나 이상의 물건 정보가 필요합니다.' }, { status: 400 });
@@ -30,7 +81,7 @@ export async function POST(request: NextRequest) {
     const serviceKey = process.env.BUILDING_API_KEY;
     const baseUrl = `https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo`;
 
-    const buildingPromises = items.map(async (item) => {
+    const buildingPromises = items.map(async (item): Promise<BuildingFetchResult> => {
       const queryParams = new URLSearchParams({
         serviceKey: serviceKey || '',
         sigunguCd: item.sigunguCd,
@@ -49,44 +100,58 @@ export async function POST(request: NextRequest) {
         ]);
 
         const rawData = await bResponse.text();
-        const marketData = await mResponse.json();
+        const marketData = (await mResponse.json().catch(() => null)) as
+          | { data?: { stats?: { trade?: { avgPricePerPyung?: number } } } }
+          | null;
         
         if (!bResponse.ok || rawData.trim().startsWith('<')) return { error: true };
 
-        const data = JSON.parse(rawData);
-        const b = data.response?.body?.items?.item;
+        const data: unknown = JSON.parse(rawData);
+        const parsed = data as { response?: { body?: { items?: { item?: unknown[] | unknown } } } };
+        const b = parsed.response?.body?.items?.item;
         const itemData = Array.isArray(b) ? b[0] : b;
 
-        if (!itemData) return { error: true };
+        if (!itemData || typeof itemData !== 'object') return { error: true };
+        const rawItem = itemData as Record<string, unknown>;
 
         return {
-          id: itemData.mgmBldrgstPk,
-          name: itemData.bldNm || itemData.dongNm || '건물명 없음',
-          address: itemData.newPlatPlc || itemData.platPlc,
+          id: String(rawItem.mgmBldrgstPk ?? ''),
+          name: String(rawItem.bldNm ?? rawItem.dongNm ?? '건물명 없음'),
+          address: String(rawItem.newPlatPlc ?? rawItem.platPlc ?? ''),
           metrics: {
             cost: item.cost || 0,
-            area: parseFloat(itemData.totArea || '0'),
-            parking: (parseInt(itemData.indrMechUtcnt || '0') + parseInt(itemData.indrAutoUtcnt || '0') +
-                      parseInt(itemData.oudrMechUtcnt || '0') + parseInt(itemData.oudrAutoUtcnt || '0')),
-            year: parseInt((itemData.useAprDay || '0000').substring(0, 4)),
-            violation: itemData.vlrtBldRgstYn === 'Y' || itemData.vlrtBldRgstYn === '1',
-            marketAvgPyung: marketData.data?.stats?.trade?.avgPricePerPyung || 0
+            area: toNumber(rawItem.totArea),
+            parking: (
+              toNumber(rawItem.indrMechUtcnt) + toNumber(rawItem.indrAutoUtcnt) +
+              toNumber(rawItem.oudrMechUtcnt) + toNumber(rawItem.oudrAutoUtcnt)
+            ),
+            year: Number(String(rawItem.useAprDay ?? '0000').substring(0, 4)) || 0,
+            violation: rawItem.vlrtBldRgstYn === 'Y' || rawItem.vlrtBldRgstYn === '1',
+            marketAvgPyung: marketData?.data?.stats?.trade?.avgPricePerPyung || 0
           },
-          raw: itemData 
+          raw: rawItem 
         };
-      } catch (err) {
+      } catch {
         return { error: true };
       }
     });
 
-    const validBuildings = (await Promise.all(buildingPromises)).filter(b => !b.error);
+    const validBuildings = (await Promise.all(buildingPromises)).filter(
+      (building): building is Exclude<BuildingFetchResult, { error: true }> => !('error' in building),
+    );
 
     if (validBuildings.length === 0) {
       return NextResponse.json({ error: '유효한 데이터를 불러오지 못했습니다.' }, { status: 500 });
     }
 
     // ★ 핵심: await 추가 ★
-    const analysis = await BuildingAnalysisService.analyze(validBuildings, type, weights, currentCost);
+    const analysis = await BuildingAnalysisService.analyze(
+      validBuildings,
+      type,
+      weights,
+      currentCost,
+    ) as AnalysisResult;
+    const bestBuilding = analysis.buildings[analysis.bestIndex] ?? analysis.buildings[0];
 
     const responseData = {
       meta: {
@@ -98,22 +163,25 @@ export async function POST(request: NextRequest) {
       recommendation: {
         bestBuildingIndex: analysis.bestIndex,
         reason: analysis.reasoning,
-        totalScore: analysis.buildings[analysis.bestIndex].analysis.score
+        totalScore: bestBuilding?.analysis?.score ?? 0
       },
-      buildings: analysis.buildings.map((b: any, idx: number) => ({
+      buildings: analysis.buildings.map((b, idx: number) => ({
         ...b,
         reportType: type,
         tags: {
           isBest: idx === analysis.bestIndex,
-          riskLevel: b.metrics.violation ? 'DANGER' : (new Date().getFullYear() - b.metrics.year > 25 ? 'CAUTION' : 'SAFE')
+          riskLevel: b.metrics.violation
+            ? 'DANGER'
+            : (new Date().getFullYear() - Number(b.metrics.year ?? 0) > 25 ? 'CAUTION' : 'SAFE')
         }
       }))
     };
 
     return NextResponse.json(responseData);
 
-  } catch (error: any) {
-    logger.error({ event: 'api.v2.error', message: error.message });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'UNKNOWN';
+    logger.error({ event: 'api.v2.error', message });
     return NextResponse.json({ error: '서버 내부 오류' }, { status: 500 });
   }
 }

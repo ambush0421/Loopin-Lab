@@ -5,6 +5,36 @@ import { logger } from '@/lib/logger';
 const KAKAO_REST_KEY = process.env.KAKAO_REST_API_KEY;
 const VWORLD_API_KEY = process.env.VWORLD_API_KEY || '9E8E6CEB-3D63-3761-B9B8-9E52D4F0DC89';
 
+type KakaoKeywordDocument = {
+  place_name?: string;
+  road_address_name?: string;
+  address_name?: string;
+  x?: string;
+  y?: string;
+};
+
+function normalizeForMatch(value: string): string {
+  return value.replace(/\s+/g, '').toLowerCase();
+}
+
+function pickBestKeywordDoc(docs: KakaoKeywordDocument[], query: string): KakaoKeywordDocument | null {
+  if (!docs.length) return null;
+  const q = normalizeForMatch(query);
+  const scored = docs.map((doc) => {
+    const place = normalizeForMatch(doc.place_name || '');
+    const road = normalizeForMatch(doc.road_address_name || '');
+    const land = normalizeForMatch(doc.address_name || '');
+    let score = 0;
+    if (place === q) score += 120;
+    if (place.startsWith(q)) score += 80;
+    if (place.includes(q)) score += 50;
+    if (road.includes(q)) score += 40;
+    if (land.includes(q)) score += 30;
+    return { doc, score };
+  }).sort((a, b) => b.score - a.score);
+  return scored[0]?.doc || null;
+}
+
 async function fetchKakaoAddress(lng: string, lat: string) {
   const response = await fetch(
     `https://dapi.kakao.com/v2/local/geo/coord2address.json?x=${lng}&y=${lat}&input_coord=WGS84`,
@@ -74,8 +104,9 @@ export async function GET(request: NextRequest) {
             } else {
                 return NextResponse.json({ success: false, error: '주소 정보를 찾을 수 없습니다.' }, { status: 404 });
             }
-        } catch (error: any) {
-            logger.error({ event: 'api.geocode.reverse.error', message: error.message });
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'UNKNOWN';
+            logger.error({ event: 'api.geocode.reverse.error', message });
             return NextResponse.json({ success: false, error: '좌표를 주소로 변환하는 중 오류 발생' }, { status: 500 });
         }
     }
@@ -98,11 +129,41 @@ export async function GET(request: NextRequest) {
             if (kakaoRes.ok) {
                 const data = await kakaoRes.json();
                 if (data.documents && data.documents.length > 0) {
+                    const first = data.documents[0];
+                    const resolvedAddress =
+                      first?.road_address?.address_name
+                      || first?.address_name
+                      || first?.address?.address_name
+                      || address;
                     return NextResponse.json({ 
                         success: true, 
-                        lat: parseFloat(data.documents[0].y),
-                        lng: parseFloat(data.documents[0].x),
+                        lat: parseFloat(first.y),
+                        lng: parseFloat(first.x),
+                        resolvedAddress,
                         source: 'kakao'
+                    });
+                }
+            }
+
+            // 건물명/상호 검색 fallback
+            const keywordRes = await fetch(
+                `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(address)}&size=10`,
+                { headers: { 'Authorization': `KakaoAK ${KAKAO_REST_KEY}` } }
+            );
+
+            if (keywordRes.ok) {
+                const keywordData = await keywordRes.json();
+                const docs = (keywordData.documents || []) as KakaoKeywordDocument[];
+                const best = pickBestKeywordDoc(docs, address);
+                if (best && best.y && best.x) {
+                    const resolvedAddress = best.road_address_name || best.address_name || address;
+                    return NextResponse.json({
+                        success: true,
+                        lat: parseFloat(best.y),
+                        lng: parseFloat(best.x),
+                        resolvedAddress,
+                        placeName: best.place_name || '',
+                        source: 'kakao_keyword'
                     });
                 }
             }
@@ -119,6 +180,7 @@ export async function GET(request: NextRequest) {
                     success: true, 
                     lat: parseFloat(data.response.result.point.y),
                     lng: parseFloat(data.response.result.point.x),
+                    resolvedAddress: address,
                     source: 'vworld' 
                 });
             }
@@ -129,8 +191,9 @@ export async function GET(request: NextRequest) {
             message: '주소를 찾을 수 없어 기본 위치를 반환합니다.'
         });
 
-    } catch (error: any) {
-        logger.error({ event: 'api.geocode.error', message: error.message });
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'UNKNOWN';
+        logger.error({ event: 'api.geocode.error', message });
         return NextResponse.json({
             success: false,
             error: '좌표 변환 중 오류 발생'

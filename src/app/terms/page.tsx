@@ -38,15 +38,15 @@ export default function TermsPage() {
                     <div className="prose prose-zinc max-w-none">
                         <h2 className="text-xl font-bold text-zinc-900 mt-8 mb-4">제1조 (목적)</h2>
                         <p className="text-zinc-600">
-                            본 약관은 Building Report Pro(이하 "서비스")가 제공하는 건축물대장 분석 서비스의
+                            본 약관은 Building Report Pro(이하 &quot;서비스&quot;)가 제공하는 건축물대장 분석 서비스의
                             이용과 관련하여 서비스와 이용자 간의 권리, 의무 및 책임사항을 규정함을 목적으로 합니다.
                         </p>
 
                         <h2 className="text-xl font-bold text-zinc-900 mt-8 mb-4">제2조 (정의)</h2>
                         <ol className="list-decimal pl-6 space-y-2 text-zinc-600">
-                            <li>"서비스"란 Building Report Pro가 제공하는 건축물대장 조회 및 분석 서비스를 말합니다.</li>
-                            <li>"이용자"란 본 약관에 따라 서비스를 이용하는 자를 말합니다.</li>
-                            <li>"콘텐츠"란 서비스에서 제공하는 건축물 정보, 분석 리포트 등 모든 정보를 말합니다.</li>
+                            <li>&quot;서비스&quot;란 Building Report Pro가 제공하는 건축물대장 조회 및 분석 서비스를 말합니다.</li>
+                            <li>&quot;이용자&quot;란 본 약관에 따라 서비스를 이용하는 자를 말합니다.</li>
+                            <li>&quot;콘텐츠&quot;란 서비스에서 제공하는 건축물 정보, 분석 리포트 등 모든 정보를 말합니다.</li>
                         </ol>
 
                         <h2 className="text-xl font-bold text-zinc-900 mt-8 mb-4">제3조 (약관의 효력 및 변경)</h2>

@@ -37,7 +37,7 @@ export default function PrivacyPage() {
                     {/* 본문 */}
                     <div className="prose prose-zinc max-w-none">
                         <p className="text-lg text-zinc-600 leading-relaxed">
-                            Building Report Pro(이하 "서비스")는 이용자의 개인정보를 중요시하며,
+                            Building Report Pro(이하 &quot;서비스&quot;)는 이용자의 개인정보를 중요시하며,
                             「개인정보 보호법」을 준수하고 있습니다. 본 개인정보처리방침을 통해
                             이용자가 제공하는 개인정보가 어떠한 용도와 방식으로 이용되고 있으며,
                             개인정보보호를 위해 어떠한 조치가 취해지고 있는지 알려드립니다.

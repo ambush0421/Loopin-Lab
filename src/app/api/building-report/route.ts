@@ -3,6 +3,34 @@ import { logger } from '@/lib/logger';
 
 export const runtime = 'edge';
 
+type BuildingReportRawItem = Record<string, unknown>;
+type BuildingReportItem = {
+  pk: string;
+  name: string;
+  address: string;
+  violation: boolean;
+  platArea: number;
+  totArea: number;
+  bcRat: number;
+  vlRat: number;
+  mainPurps: string;
+  structure: string;
+  parking: {
+    indoor: number;
+    outdoor: number;
+  };
+  raw: BuildingReportRawItem;
+};
+
+function toText(value: unknown): string {
+  return String(value ?? '');
+}
+
+function toNumber(value: unknown): number {
+  const num = Number(value ?? 0);
+  return Number.isFinite(num) ? num : 0;
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const sigunguCd = searchParams.get('sigunguCd');
@@ -67,18 +95,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: '인증 오류 또는 잘못된 요청입니다. (XML 응답)', details: rawData.substring(0, 200) }, { status: 401 });
     }
 
-    const data = JSON.parse(rawData);
-    const items = data.response?.body?.items?.item;
-    const itemList = Array.isArray(items) ? items : (items ? [items] : []);
+    const data: unknown = JSON.parse(rawData);
+    const parsed = (data && typeof data === 'object')
+      ? (data as { response?: { body?: { totalCount?: number | string; items?: { item?: unknown[] | unknown } } } })
+      : {};
+    const items = parsed.response?.body?.items?.item;
+    const itemList: BuildingReportRawItem[] = Array.isArray(items)
+      ? items.filter((item): item is BuildingReportRawItem => !!item && typeof item === 'object')
+      : (items && typeof items === 'object' ? [items as BuildingReportRawItem] : []);
 
     logger.info({
       event: 'building_report.success',
-      itemCount: data.response?.body?.totalCount || 0,
+      itemCount: parsed.response?.body?.totalCount || 0,
       fetchedCount: itemList.length
     });
 
     // Transform Data
-    const reportItems = itemList.map((item: any) => {
+    const reportItems: BuildingReportItem[] = itemList.map((item) => {
       // Log missing critical fields
       if (!item.vlrtBldRgstYn && item.vlrtBldRgstYn !== '0') {
          // Some APIs omit this if 'N' or empty. We'll treat as clean but log debug.
@@ -86,19 +119,19 @@ export async function GET(request: NextRequest) {
       }
 
       return {
-        pk: item.mgmBldrgstPk,
-        name: item.bldNm || item.dongNm || '건물명 없음',
-        address: item.newPlatPlc || item.platPlc,
-        violation: item.vlrtBldRgstYn === 'Y' || item.vlrtBldRgstYn === '1',
-        platArea: parseFloat(item.platArea || '0'),
-        totArea: parseFloat(item.totArea || '0'),
-        bcRat: parseFloat(item.bcRat || '0'), // 건폐율
-        vlRat: parseFloat(item.vlRat || '0'), // 용적률
-        mainPurps: item.mainPurpsCdNm,
-        structure: item.strctCdNm,
+        pk: toText(item.mgmBldrgstPk),
+        name: toText(item.bldNm) || toText(item.dongNm) || '건물명 없음',
+        address: toText(item.newPlatPlc) || toText(item.platPlc),
+        violation: toText(item.vlrtBldRgstYn) === 'Y' || toText(item.vlrtBldRgstYn) === '1',
+        platArea: toNumber(item.platArea),
+        totArea: toNumber(item.totArea),
+        bcRat: toNumber(item.bcRat), // 건폐율
+        vlRat: toNumber(item.vlRat), // 용적률
+        mainPurps: toText(item.mainPurpsCdNm),
+        structure: toText(item.strctCdNm),
         parking: {
-          indoor: parseInt(item.indrMechUtcnt || '0') + parseInt(item.indrAutoUtcnt || '0'),
-          outdoor: parseInt(item.oudrMechUtcnt || '0') + parseInt(item.oudrAutoUtcnt || '0'),
+          indoor: toNumber(item.indrMechUtcnt) + toNumber(item.indrAutoUtcnt),
+          outdoor: toNumber(item.oudrMechUtcnt) + toNumber(item.oudrAutoUtcnt),
         },
         raw: item // Keep raw for detail view
       };
@@ -106,7 +139,7 @@ export async function GET(request: NextRequest) {
 
     const summary = {
       totalBuildings: reportItems.length,
-      violationCount: reportItems.filter((i: any) => i.violation).length,
+      violationCount: reportItems.filter((i) => i.violation).length,
       avgAge: 0 // Placeholder for now
     };
 
@@ -119,11 +152,12 @@ export async function GET(request: NextRequest) {
       items: reportItems
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'UNKNOWN';
     logger.error({
       event: 'building_report.fatal_error',
-      message: error.message
+      message
     });
-    return NextResponse.json({ error: '서버 내부 오류가 발생했습니다.', message: error.message }, { status: 500 });
+    return NextResponse.json({ error: '서버 내부 오류가 발생했습니다.', message }, { status: 500 });
   }
 }

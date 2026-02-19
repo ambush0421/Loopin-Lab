@@ -1,6 +1,45 @@
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from 'next/server';
-import { logger } from '@/lib/logger';
+
+type MonthInfo = {
+  ymd: string;
+  display: string;
+};
+
+type RawTradeItem = Record<string, unknown>;
+
+type TransactionItem = {
+  addr: string;
+  price: string;
+  rawPrice: number;
+  pyung: string;
+  pricePerPyung: number;
+  floor: string;
+  date: string;
+  lat: number;
+  lng: number;
+};
+
+function toText(value: unknown): string {
+  return String(value ?? '').trim();
+}
+
+function toNumber(value: unknown): number {
+  const normalized = String(value ?? '').replace(/,/g, '').trim();
+  if (!normalized) return 0;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function toTradeItems(value: unknown): RawTradeItem[] {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is RawTradeItem => !!item && typeof item === 'object');
+  }
+  if (value && typeof value === 'object') {
+    return [value as RawTradeItem];
+  }
+  return [];
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -22,51 +61,53 @@ export async function GET(request: NextRequest) {
       return {
         ymd: `${d.getFullYear()}${(d.getMonth() + 1).toString().padStart(2, '0')}`,
         display: `${String(d.getFullYear()).substring(2, 4)}.${(d.getMonth() + 1).toString().padStart(2, '0')}`
-      };
+      } satisfies MonthInfo;
     }).reverse();
 
     // 병렬 데이터 조회 (Performance Optimization)
-    const responses = await Promise.all(
+    const responses = await Promise.all<{ month: MonthInfo; items: RawTradeItem[] }>(
       months.map(async (month) => {
         const queryParams = `serviceKey=${serviceKey}&LAWD_CD=${sigunguCd}&DEAL_YMD=${month.ymd}&_type=json`;
         try {
           const res = await fetch(`${baseUrl}?${queryParams}`, { cache: 'no-store' });
           const raw = await res.text();
           if (raw.includes('<RETURN_REASON>')) return { month, items: [] };
-          const data = JSON.parse(raw);
-          const items = data.response?.body?.items?.item || [];
-          const filtered = (Array.isArray(items) ? items : [items]).filter((item: any) =>
-            item && (String(item.법정동본번코드) === bjdongCd || item.법정동?.includes(bjdongCd))
-          );
+          const data = JSON.parse(raw) as { response?: { body?: { items?: { item?: unknown } } } };
+          const items = toTradeItems(data.response?.body?.items?.item);
+          const filtered = items.filter((item) => {
+            const bjdongMainCode = toText(item.법정동본번코드);
+            const legalDong = toText(item.법정동);
+            return bjdongMainCode === bjdongCd || legalDong.includes(bjdongCd);
+          });
           return { month, items: filtered };
-        } catch (e) {
+        } catch {
           return { month, items: [] };
         }
       })
     );
 
-    let allTransactions: any[] = [];
+    const allTransactions: TransactionItem[] = [];
     const trends: { month: string; price: number }[] = [];
 
     responses.forEach(({ month, items }) => {
       let monthTotalPrice = 0;
       let monthTotalPyung = 0;
 
-      items.forEach((item: any) => {
-        const price = parseInt(String(item.거래금액).replace(/,/g, '')) || 0;
-        const area = parseFloat(item.전용면적) || 0;
+      items.forEach((item) => {
+        const price = toNumber(item.거래금액);
+        const area = toNumber(item.전용면적);
         if (price > 0 && area > 0) {
           const pyung = area * 0.3025;
           monthTotalPrice += price;
           monthTotalPyung += pyung;
 
           allTransactions.push({
-            addr: `${item.법정동} ${item.지번}`,
+            addr: `${toText(item.법정동)} ${toText(item.지번)}`.trim(),
             price: price >= 10000 ? `${(price / 10000).toFixed(1)}억` : `${price}만`,
             rawPrice: price,
             pyung: pyung.toFixed(1),
             pricePerPyung: Math.round(price / pyung),
-            floor: item.층,
+            floor: toText(item.층),
             date: month.display,
             lat: 0, lng: 0
           });
@@ -92,21 +133,21 @@ export async function GET(request: NextRequest) {
           const res = await fetch(`https://dapi.kakao.com/v2/local/search/address.json?query=${encodeURIComponent(tx.addr)}`, {
             headers: { 'Authorization': `KakaoAK ${KAKAO_REST_KEY}` }
           });
-          const geo = await res.json();
+          const geo = await res.json() as { documents?: Array<{ y?: string; x?: string }> };
           if (geo.documents?.[0]) {
-            tx.lat = parseFloat(geo.documents[0].y);
-            tx.lng = parseFloat(geo.documents[0].x);
+            tx.lat = toNumber(geo.documents[0].y);
+            tx.lng = toNumber(geo.documents[0].x);
             return;
           }
         }
         // 2. 브이월드 폴백
         const vworldRes = await fetch(`https://api.vworld.kr/req/address?service=address&request=getcoord&version=2.0&crs=epsg:4326&address=${encodeURIComponent(tx.addr)}&format=json&type=ROAD&key=9E8E6CEB-3D63-3761-B9B8-9E52D4F0DC89`);
-        const vworld = await vworldRes.json();
+        const vworld = await vworldRes.json() as { response?: { result?: { point?: { y?: string; x?: string } } } };
         if (vworld.response?.result?.point) {
-          tx.lat = parseFloat(vworld.response.result.point.y);
-          tx.lng = parseFloat(vworld.response.result.point.x);
+          tx.lat = toNumber(vworld.response.result.point.y);
+          tx.lng = toNumber(vworld.response.result.point.x);
         }
-      } catch (err) { }
+      } catch {}
     }));
 
     const validTrends = trends.filter(t => t.price > 0);
@@ -120,7 +161,7 @@ export async function GET(request: NextRequest) {
       transactions: topTransactions.filter(tx => tx.lat !== 0)
     });
 
-  } catch (error: any) {
+  } catch {
     return NextResponse.json({ error: '최적화 조회 실패' }, { status: 500 });
   }
 }

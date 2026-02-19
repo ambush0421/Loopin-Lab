@@ -29,6 +29,21 @@ type UnitRow = Record<string, unknown> & {
     mainPurpsCdNm?: string;
 };
 
+type FloorAreaRow = {
+    _uid: string;
+    flrNo: number;
+    flrGbCd?: string;
+    flrGbCdNm?: string;
+    area: string | number;
+    etcPurps?: string;
+    mainPurpsCdNm?: string;
+};
+
+type FloorAreaMeta = {
+    source: 'api' | 'unit_aggregate' | 'none';
+    note: string;
+};
+
 type TransactionMarker = {
     lat: number;
     lng: number;
@@ -48,6 +63,8 @@ interface FloorGroup {
 interface SelectionPageProps {
     buildingData: (TopMetricsData & Record<string, unknown> & { bldNm?: string }) | null;
     units: UnitRow[];
+    floorAreas?: FloorAreaRow[];
+    floorAreaMeta?: FloorAreaMeta;
     address: string;
     coords?: { lat: number; lng: number };
     transactions?: TransactionMarker[];
@@ -138,10 +155,29 @@ const formatM2Fixed2 = (value: unknown): string => {
     return m2.toFixed(2);
 };
 
-const SHARED_FACILITY_KEYWORDS = ['계단실', '기계실', '전기실'];
+const SHARED_FACILITY_KEYWORDS = [
+    '계단실',
+    '기계실',
+    '전기실',
+    '층별공용',
+    '공용부분',
+    '공유면적',
+    '복도',
+    '홀',
+    '로비',
+    '화장실',
+    '승강기',
+    '엘리베이터',
+    'eps',
+    'ps',
+    '덕트',
+    '주차램프',
+    '램프',
+    '공용',
+];
 
 const isSharedFacilityPurpose = (value: unknown): boolean => {
-    const normalized = String(value ?? '').trim().replace(/\s+/g, '');
+    const normalized = String(value ?? '').trim().replace(/[\s()\-_/.,]/g, '').toLowerCase();
     if (!normalized) return false;
     return SHARED_FACILITY_KEYWORDS.some((keyword) => normalized.includes(keyword));
 };
@@ -178,6 +214,12 @@ const addDecimalStrings = (a: string, b: string): string => {
     return fracPart ? `${sign}${intPart}.${fracPart}` : `${sign}${intPart}`;
 };
 
+const getFloorLabel = (flrNo: string | number): string => {
+    const n = Number(flrNo) || 0;
+    if (n < 0) return `B${Math.abs(n)}F`;
+    return `${n}F`;
+};
+
 // ==========================================
 // InfoCard 컴포넌트
 // ==========================================
@@ -212,6 +254,8 @@ const InfoCard = ({ icon, label, value, subtext, color }: InfoCardProps) => (
 export function SelectionPage({
     buildingData,
     units,
+    floorAreas = [],
+    floorAreaMeta = { source: 'none', note: '층별 면적 데이터가 없습니다.' },
     address,
     coords,
     transactions,
@@ -386,6 +430,106 @@ export function SelectionPage({
         };
     }, [selectedUnits]);
 
+    const floorSummaryRows = useMemo(() => {
+        const pickPreferredPurpose = (currentRaw: string, candidateRaw: string): string => {
+            const current = currentRaw.trim();
+            const candidate = candidateRaw.trim();
+            if (!candidate) return current;
+            if (!current) return candidate;
+            const currentShared = isSharedFacilityPurpose(current);
+            const candidateShared = isSharedFacilityPurpose(candidate);
+            if (currentShared && !candidateShared) return candidate;
+            if (!currentShared && candidateShared) return current;
+            return current.length >= candidate.length ? current : candidate;
+        };
+
+        const ledgerMap = new Map<
+            number,
+            {
+                ledgerM2Raw: string;
+                ledgerPurpose: string;
+                flrGbCd: string;
+                flrGbCdNm: string;
+            }
+        >();
+
+        floorAreas.forEach((item) => {
+            const floorLevel = Number(item.flrNo) || 0;
+            const areaRaw = getM2RawText(item.area);
+            const purposeCandidate = String(item.etcPurps || item.mainPurpsCdNm || '').trim();
+            const existing = ledgerMap.get(floorLevel) ?? {
+                ledgerM2Raw: '0',
+                ledgerPurpose: '',
+                flrGbCd: String(item.flrGbCd ?? '').trim(),
+                flrGbCdNm: String(item.flrGbCdNm ?? '').trim(),
+            };
+
+            existing.ledgerM2Raw = addDecimalStrings(existing.ledgerM2Raw, areaRaw);
+            existing.ledgerPurpose = pickPreferredPurpose(existing.ledgerPurpose, purposeCandidate);
+            if (!existing.flrGbCd) existing.flrGbCd = String(item.flrGbCd ?? '').trim();
+            if (!existing.flrGbCdNm) existing.flrGbCdNm = String(item.flrGbCdNm ?? '').trim();
+            ledgerMap.set(floorLevel, existing);
+        });
+
+        const unitMap = new Map<
+            number,
+            {
+                unitCount: number;
+                exclusiveM2Raw: string;
+                contractM2Raw: string;
+            }
+        >();
+
+        floorsData.forEach((floor) => {
+            const summary = unitMap.get(floor.floorLevel) ?? {
+                unitCount: 0,
+                exclusiveM2Raw: '0',
+                contractM2Raw: '0',
+            };
+
+            summary.unitCount += floor.units.length;
+            floor.units.forEach((unit) => {
+                summary.exclusiveM2Raw = addDecimalStrings(summary.exclusiveM2Raw, getM2RawText(unit.area));
+                summary.contractM2Raw = addDecimalStrings(
+                    summary.contractM2Raw,
+                    getM2RawText(unit.contractArea ?? unit.area),
+                );
+            });
+            unitMap.set(floor.floorLevel, summary);
+        });
+
+        const floorLevels = new Set<number>([
+            ...Array.from(ledgerMap.keys()),
+            ...Array.from(unitMap.keys()),
+        ]);
+
+        const toPyText = (m2Raw: string): string => {
+            const m2 = Number(m2Raw);
+            if (!Number.isFinite(m2)) return '0.00';
+            return (m2 * 0.3025).toFixed(2);
+        };
+
+        return Array.from(floorLevels)
+            .sort((a, b) => b - a)
+            .map((floorLevel, index) => {
+                const ledger = ledgerMap.get(floorLevel);
+                const unit = unitMap.get(floorLevel);
+                return {
+                    _uid: `${floorLevel}-${index}`,
+                    floorLevel,
+                    floorLabel: getFloorLabel(floorLevel),
+                    ledgerM2Raw: ledger?.ledgerM2Raw ?? '0',
+                    ledgerPy: toPyText(ledger?.ledgerM2Raw ?? '0'),
+                    exclusiveM2Raw: unit?.exclusiveM2Raw ?? '0',
+                    exclusivePy: toPyText(unit?.exclusiveM2Raw ?? '0'),
+                    contractM2Raw: unit?.contractM2Raw ?? '0',
+                    contractPy: toPyText(unit?.contractM2Raw ?? '0'),
+                    unitCount: unit?.unitCount ?? 0,
+                    purpose: ledger?.ledgerPurpose ?? '',
+                };
+            });
+    }, [floorAreas, floorsData]);
+
     // 호실 토글
     const toggleUnit = (unit: UnitRow) => {
         const next = new Set(selectedIds);
@@ -429,13 +573,6 @@ export function SelectionPage({
 
     const getContractAreaM2 = (unit: UnitRow): string => {
         return formatM2Fixed2(unit.contractArea ?? unit.area);
-    };
-
-    // 층 레이블 포맷팅 (지하층: -1 → B1F, 지상층: 3 → 3F)
-    const getFloorLabel = (flrNo: string | number): string => {
-        const n = Number(flrNo) || 0;
-        if (n < 0) return `B${Math.abs(n)}F`;
-        return `${n}F`;
     };
 
     if (!buildingInfo) return null;
@@ -511,7 +648,7 @@ export function SelectionPage({
             <div className="flex-1 flex flex-col relative">
 
                 {/* Header */}
-                <header className="bg-white border-b border-slate-200 h-[72px] flex items-center justify-between px-6 z-10 shrink-0">
+                <header className="relative z-50 bg-white border-b border-slate-200 h-[72px] flex items-center justify-between px-6 shrink-0">
                     <div className="flex items-center gap-3 cursor-pointer" onClick={onBack}>
                         <div className="bg-blue-600 rounded-lg p-1.5 shadow-sm">
                             <Building className="w-5 h-5 text-white" />
@@ -542,44 +679,53 @@ export function SelectionPage({
                         </div>
                     </div>
 
-                    {/* Right Actions */}
-                    <div className="flex items-center gap-3">
-                        <div className="relative hidden xl:flex items-center" ref={searchWrapperRef}>
-                            <div className="relative flex items-center border border-slate-200 rounded-lg p-1 bg-white">
-                                <Search className="w-4 h-4 text-slate-400 ml-3" />
+                    <div className="w-24" />
+                </header>
+
+                {/* Scrollable Main Body */}
+                <main className="relative z-0 flex-1 p-6 md:p-8 bg-[#F7F9FC]">
+                    <div className="max-w-[1400px] mx-auto space-y-6 pb-32">
+                        {/* Address Search Section */}
+                        <div ref={searchWrapperRef} className="rounded-[24px] border border-slate-200 bg-white/90 p-2 shadow-sm">
+                            <div className="relative flex items-center rounded-[20px] border border-slate-200 bg-white pl-3 pr-2 py-1.5">
+                                <Search className="w-5 h-5 text-slate-400" />
                                 <input
                                     type="text"
                                     value={addressInput}
                                     onChange={(e) => setAddressInput(e.target.value)}
-                                    onKeyDown={(e) => { if (e.key === 'Enter' && addressInput.trim()) onSearch(); }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && addressInput.trim()) {
+                                            e.preventDefault();
+                                            onSearch();
+                                        }
+                                    }}
                                     placeholder="새 주소 검색..."
-                                    className="py-1.5 pl-2 pr-4 text-xs w-[240px] outline-none text-slate-600"
+                                    className="py-2.5 pl-2 pr-3 text-base w-full outline-none text-slate-700"
                                 />
                                 <button
                                     onClick={onSearch}
-                                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-md text-xs font-bold transition-colors"
+                                    className="bg-blue-600 hover:bg-blue-700 text-white min-w-[92px] sm:min-w-[110px] px-5 py-2.5 rounded-[16px] text-base font-bold transition-colors whitespace-nowrap"
                                 >
                                     검색
                                 </button>
                             </div>
-                            {showPostcode && (
-                                <div className="absolute top-full left-0 mt-1 w-[400px] h-[400px] bg-white rounded-xl shadow-2xl border border-slate-200 z-[9999] overflow-hidden">
-                                    <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-200">
-                                        <span className="text-xs font-medium text-slate-600">주소 검색</span>
-                                        <button onClick={onClosePostcode} title="주소 검색 닫기" className="p-1 hover:bg-slate-200 rounded-lg transition-colors">
-                                            <X className="w-3.5 h-3.5 text-slate-500" />
-                                        </button>
-                                    </div>
-                                    <div ref={postcodeRef} className="w-full" style={{ height: 'calc(100% - 36px)' }} />
-                                </div>
-                            )}
                         </div>
-                    </div>
-                </header>
 
-                {/* Scrollable Main Body */}
-                <main className="flex-1 p-6 md:p-8 bg-[#F7F9FC]">
-                    <div className="max-w-[1400px] mx-auto space-y-6 pb-32">
+                        {showPostcode && (
+                            <div className="w-full bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+                                <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-200">
+                                    <span className="text-sm font-semibold text-slate-700">주소를 선택해주세요</span>
+                                    <button
+                                        onClick={onClosePostcode}
+                                        title="주소 검색 닫기"
+                                        className="px-1 text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors"
+                                    >
+                                        닫기
+                                    </button>
+                                </div>
+                                <div ref={postcodeRef} className="w-full" style={{ height: '520px' }} />
+                            </div>
+                        )}
 
                         {/* Building Title */}
                         <div className="mb-6">
@@ -597,6 +743,114 @@ export function SelectionPage({
                             <InfoCard icon={<TrendingUp className="w-5 h-5 text-white" />} label="건폐·용적" value={`${buildingInfo.coverageRatio}% / ${buildingInfo.floorAreaRatio}%`} subtext="건폐 / 용적" color="bg-pink-500" />
                             <InfoCard icon={<Building2 className="w-5 h-5 text-white" />} label="주용도" value={buildingInfo.usage} subtext={buildingInfo.structure} color="bg-cyan-500" />
                             <InfoCard icon={<AlertCircle className="w-5 h-5 text-white" />} label="위반건축물" value={buildingInfo.violation} subtext={buildingInfo.violation === '정상' ? '적합 상태' : '위반 내용 확인'} color={buildingInfo.violation === '정상' ? 'bg-emerald-500' : 'bg-red-500'} />
+                        </div>
+
+                        {/* Floor Area Summary */}
+                        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm mb-8 overflow-hidden">
+                            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-2">
+                                    <Layers className="w-4 h-4 text-blue-600" />
+                                    <h3 className="text-sm md:text-base font-bold text-slate-900">층별 면적 요약</h3>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => setActiveFloorFilter('all')}
+                                        className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                                            activeFloorFilter === 'all'
+                                                ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                                : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                                        }`}
+                                    >
+                                        전체층 보기
+                                    </button>
+                                    {activeFloorFilter !== 'all' && (
+                                        <span className="text-xs text-blue-600 font-semibold">
+                                            {getFloorLabel(activeFloorFilter)} 필터 적용
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                            <div
+                                className={`mx-6 mt-4 mb-1 rounded-lg border px-3 py-2 text-xs ${
+                                    floorAreaMeta.source === 'api'
+                                        ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                                    : floorAreaMeta.source === 'none'
+                                        ? 'bg-slate-50 border-slate-200 text-slate-500'
+                                        : 'bg-amber-50 border-amber-200 text-amber-700'
+                                }`}
+                            >
+                                {floorAreaMeta.source === 'api'
+                                    ? '원본 데이터'
+                                    : floorAreaMeta.source === 'none'
+                                        ? '미제공'
+                                        : '보정 데이터'} · {floorAreaMeta.note}
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead className="bg-slate-50 text-slate-500 text-xs">
+                                        <tr>
+                                            <th className="px-4 py-3 text-left">층</th>
+                                            <th className="px-4 py-3 text-right">건축물대장 층면적</th>
+                                            <th className="px-4 py-3 text-right">전용면적 합계</th>
+                                            <th className="px-4 py-3 text-right">계약면적 합계</th>
+                                            <th className="px-4 py-3 text-right">호실수</th>
+                                            <th className="px-4 py-3 text-left">층 용도</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {floorSummaryRows.map((row) => {
+                                            const isActive = activeFloorFilter === row.floorLevel;
+                                            const hasLedgerArea = row.ledgerM2Raw !== '0';
+                                            return (
+                                                <tr
+                                                    key={row._uid}
+                                                    onClick={() => setActiveFloorFilter((prev) => (prev === row.floorLevel ? 'all' : row.floorLevel))}
+                                                    className={`cursor-pointer transition-colors ${
+                                                        isActive ? 'bg-blue-50/60' : 'hover:bg-slate-50'
+                                                    }`}
+                                                >
+                                                    <td className="px-4 py-3">
+                                                        <span className={`font-bold text-xs px-2 py-1 rounded ${
+                                                            row.floorLevel < 0 ? 'text-emerald-700 bg-emerald-50' : 'text-slate-700 bg-slate-100'
+                                                        }`}>
+                                                            {row.floorLabel}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right">
+                                                        {hasLedgerArea ? (
+                                                            <>
+                                                                <span className="font-bold text-slate-900">{row.ledgerM2Raw}㎡</span>
+                                                                <span className="text-xs text-slate-400 ml-1">({row.ledgerPy}평)</span>
+                                                            </>
+                                                        ) : (
+                                                            <span className="text-slate-300">-</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right">
+                                                        <span className="font-semibold text-slate-800">{row.exclusiveM2Raw}㎡</span>
+                                                        <span className="text-xs text-slate-400 ml-1">({row.exclusivePy}평)</span>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right">
+                                                        <span className="font-semibold text-blue-700">{row.contractM2Raw}㎡</span>
+                                                        <span className="text-xs text-slate-400 ml-1">({row.contractPy}평)</span>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right font-semibold text-slate-700">{row.unitCount}</td>
+                                                    <td className="px-4 py-3 text-slate-500 text-xs">
+                                                        {row.purpose || '-'}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                        {floorSummaryRows.length === 0 && (
+                                            <tr>
+                                                <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
+                                                    층별 면적 데이터가 없습니다.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
 
                         {/* Split Layout: Map + Unit Grid */}

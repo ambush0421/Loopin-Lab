@@ -47,7 +47,7 @@ export function ComparisonTable({ data, onViewDetail }: ComparisonTableProps) {
           <div className="bg-white/10 px-8 py-6 rounded-2xl backdrop-blur-xl border border-white/20 max-w-lg">
             <div className="flex items-start gap-4">
               <Info className="w-6 h-6 text-white mt-1 shrink-0" />
-              <p className="text-sm font-medium leading-relaxed italic">"{recommendation.reason}"</p>
+              <p className="text-sm font-medium leading-relaxed italic">&quot;{recommendation.reason}&quot;</p>
             </div>
           </div>
         </div>

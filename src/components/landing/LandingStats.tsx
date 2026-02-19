@@ -1,10 +1,10 @@
 'use client';
 
 const STATS = [
-  { label: 'Scenario Checks', value: '1,200+' },
-  { label: 'Average Analysis Time', value: '3 min' },
-  { label: 'Saved Manual Steps', value: '70%' },
-  { label: 'Repeat-Use Teams', value: '100+' },
+  { label: '시나리오 점검', value: '1,200+' },
+  { label: '평균 분석 시간', value: '3분' },
+  { label: '절감된 수작업', value: '70%' },
+  { label: '재사용 팀', value: '100+' },
 ];
 
 export function LandingStats() {

@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { logger } from '@/lib/logger';
 import { BuildingAnalysisService } from '@/lib/services/building-analysis';
 
 export const runtime = 'edge';
 
 const API_URL = 'https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo';
+type ReportType = 'LEASE' | 'PURCHASE' | 'INVEST';
+
+function parseReportType(value: string | null): ReportType {
+  if (value === 'PURCHASE' || value === 'INVEST') return value;
+  return 'LEASE';
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -12,8 +17,8 @@ export async function GET(request: NextRequest) {
   const bjdongCd = searchParams.get('bjdongCd');
   const bun = searchParams.get('bun');
   const ji = searchParams.get('ji');
-  const type = (searchParams.get('type') as any) || 'LEASE';
-  const property = (searchParams.get('property') as any) || 'OFFICE';
+  const type = parseReportType(searchParams.get('type'));
+  const property = searchParams.get('property') || 'OFFICE';
   
   // 사용자 입력 금융 데이터
   const inputCost = Number(searchParams.get('cost') || 0);
@@ -43,7 +48,7 @@ export async function GET(request: NextRequest) {
 
     const rawData = await bResponse.text();
     let marketData = { data: { stats: { trade: { avgPricePerPyung: 0 } } } };
-    try { marketData = await mResponse.json(); } catch (e) {}
+    try { marketData = await mResponse.json(); } catch {}
 
     if (rawData.includes('<CM700001>')) return NextResponse.json({ success: false, error: '인증 오류' }, { status: 401 });
 
@@ -100,7 +105,7 @@ export async function GET(request: NextRequest) {
       }
     });
 
-  } catch (error: any) {
+  } catch {
     return NextResponse.json({ success: false, error: '서버 오류' }, { status: 500 });
   }
 }

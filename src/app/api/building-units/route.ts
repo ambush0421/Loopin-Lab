@@ -8,6 +8,16 @@ const BASE_URL = 'https://apis.data.go.kr/1613000/BldRgstHubService/getBrExposPu
 
 const PAGE_SIZE = 100;
 const MAX_PAGES = 150;
+type PublicUnitsApiResponse = {
+  response?: {
+    body?: {
+      totalCount?: number | string;
+      items?: {
+        item?: unknown[] | unknown;
+      };
+    };
+  };
+};
 
 // 입력값 검증 유틸리티
 function validateParam(value: string | null, maxLength: number = 10): string {
@@ -15,7 +25,10 @@ function validateParam(value: string | null, maxLength: number = 10): string {
   return value.replace(/[^0-9]/g, '').substring(0, maxLength);
 }
 
-async function fetchPage(params: Record<string, string>, pageNo: number): Promise<any> {
+async function fetchPage(
+  params: Record<string, string>,
+  pageNo: number,
+): Promise<PublicUnitsApiResponse> {
   if (!API_KEY) throw new Error('API_CONFIG_ERROR');
 
   const serviceKey = encodeURIComponent(API_KEY);
@@ -41,7 +54,11 @@ async function fetchPage(params: Record<string, string>, pageNo: number): Promis
     throw new Error('XML_RESPONSE');
   }
 
-  return JSON.parse(rawData);
+  const parsed: unknown = JSON.parse(rawData);
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('INVALID_JSON');
+  }
+  return parsed as PublicUnitsApiResponse;
 }
 
 export async function GET(request: NextRequest) {
@@ -70,10 +87,12 @@ export async function GET(request: NextRequest) {
     const firstPage = await fetchPage(params, 1);
     const totalCount = Number(firstPage.response?.body?.totalCount || 0);
 
-    let allItems = firstPage.response?.body?.items?.item || [];
-    if (!Array.isArray(allItems)) {
-      allItems = allItems ? [allItems] : [];
-    }
+    const rawAllItems = firstPage.response?.body?.items?.item;
+    let allItems: unknown[] = Array.isArray(rawAllItems)
+      ? rawAllItems
+      : rawAllItems != null
+        ? [rawAllItems]
+        : [];
 
     logger.info({ event: 'api.units.first_page', totalCount, firstPageItems: allItems.length });
 
@@ -87,8 +106,9 @@ export async function GET(request: NextRequest) {
 
         for (let page = batchStart; page <= batchEnd; page++) {
           pagePromises.push(
-            fetchPage(params, page).catch(e => {
-              logger.warn({ event: 'api.units.page_error', page, error: e.message });
+            fetchPage(params, page).catch((error: unknown) => {
+              const message = error instanceof Error ? error.message : 'UNKNOWN';
+              logger.warn({ event: 'api.units.page_error', page, error: message });
               return null;
             })
           );
@@ -98,10 +118,12 @@ export async function GET(request: NextRequest) {
 
         for (const pageData of batchResults) {
           if (pageData) {
-            let items = pageData.response?.body?.items?.item || [];
-            if (!Array.isArray(items)) {
-              items = items ? [items] : [];
-            }
+            const rawItems = pageData.response?.body?.items?.item;
+            const items: unknown[] = Array.isArray(rawItems)
+              ? rawItems
+              : rawItems != null
+                ? [rawItems]
+                : [];
             allItems = allItems.concat(items);
           }
         }
@@ -128,14 +150,15 @@ export async function GET(request: NextRequest) {
       }
     });
 
-  } catch (error: any) {
-    logger.error({ event: 'api.units.fatal_error', message: error.message });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'UNKNOWN';
+    logger.error({ event: 'api.units.fatal_error', message });
 
-    if (error.message === 'API_AUTH_ERROR' || error.message === 'API_CONFIG_ERROR') {
+    if (message === 'API_AUTH_ERROR' || message === 'API_CONFIG_ERROR') {
       return NextResponse.json({ error: '인증 오류' }, { status: 401 });
     }
 
-    if (error.message === 'XML_RESPONSE') {
+    if (message === 'XML_RESPONSE') {
       return NextResponse.json({ error: 'API 응답 오류' }, { status: 502 });
     }
 

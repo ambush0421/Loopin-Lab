@@ -2,16 +2,16 @@
 
 const STEPS = [
   {
-    title: 'Address Search',
-    description: 'Find the target building and lock the base parcel context.',
+    title: '주소 검색',
+    description: '대상 건물을 찾아 기본 지번 정보를 고정합니다.',
   },
   {
-    title: 'Automatic Aggregation',
-    description: 'Collect unit, price, and location signals into a single dataset.',
+    title: '자동 통합 수집',
+    description: '호실, 시세, 위치 신호를 하나의 데이터셋으로 통합합니다.',
   },
   {
-    title: 'Decision Output',
-    description: 'Review comparative metrics and proceed with a generated quotation.',
+    title: '의사결정 출력',
+    description: '비교 지표를 검토하고 견적 흐름으로 바로 이동합니다.',
   },
 ];
 
@@ -20,7 +20,7 @@ export function LandingHowItWorks() {
     <section className="bg-slate-50 py-16">
       <div className="mx-auto max-w-6xl px-4">
         <h3 className="mb-8 text-center text-3xl font-extrabold tracking-tight text-slate-900">
-          How It Works
+          이용 방법
         </h3>
         <div className="grid gap-4 md:grid-cols-3">
           {STEPS.map((step, index) => (

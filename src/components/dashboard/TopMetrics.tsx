@@ -6,11 +6,32 @@ import {
   Layers, Maximize, Calendar, Car, ArrowUpCircle
 } from "lucide-react";
 
-export function TopMetrics({ data }: { data: any }) {
+export interface TopMetricsData {
+  ugrndFlrCnt?: string | number;
+  grndFlrCnt?: string | number;
+  hhldCnt?: string | number;
+  hoCnt?: string | number;
+  totArea?: string | number;
+  useAprDay?: string;
+  indrMechUtcnt?: string | number;
+  indrAutoUtcnt?: string | number;
+  oudrMechUtcnt?: string | number;
+  oudrAutoUtcnt?: string | number;
+  rideUseElvtCnt?: string | number;
+  emgenUseElvtCnt?: string | number;
+  bcRat?: string | number;
+  vlRat?: string | number;
+  mainPurpsCdNm?: string;
+  strctCdNm?: string;
+  vlrtBldRgstYn?: string;
+  [key: string]: unknown;
+}
+
+export function TopMetrics({ data }: { data: TopMetricsData | null }) {
   if (!data) return null;
 
   // 연차 계산
-  const getYears = (dateStr: string) => {
+  const getYears = (dateStr?: string) => {
     if (!dateStr || dateStr.trim() === '' || dateStr.length < 4) return "-";
     const year = parseInt(dateStr.substring(0, 4));
     if (isNaN(year)) return "-";
@@ -20,13 +41,13 @@ export function TopMetrics({ data }: { data: any }) {
   };
 
   // 날짜 포맷팅
-  const formatDate = (dateStr: string) => {
+  const formatDate = (dateStr?: string) => {
     if (!dateStr || dateStr.trim() === '' || dateStr.length < 8) return "-";
     return `${dateStr.substring(0, 4)}.${dateStr.substring(4, 6)}.${dateStr.substring(6, 8)}`;
   };
 
   // 평수 환산
-  const toPyung = (m2: any) => {
+  const toPyung = (m2: string | number | null | undefined) => {
     if (!m2) return "0";
     return (Number(m2) * 0.3025).toLocaleString(undefined, { maximumFractionDigits: 0 });
   };

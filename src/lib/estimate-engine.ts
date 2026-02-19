@@ -116,10 +116,29 @@ const MARKET_RATES: Record<string, { buy: number; rent_deposit: number; rent_mon
   '근린생활시설': { buy: 900, rent_deposit: 25000, rent_monthly: 40 },
 };
 
-const SHARED_FACILITY_KEYWORDS = ['계단실', '기계실', '전기실'];
+const SHARED_FACILITY_KEYWORDS = [
+  '계단실',
+  '기계실',
+  '전기실',
+  '층별공용',
+  '공용부분',
+  '공유면적',
+  '복도',
+  '홀',
+  '로비',
+  '화장실',
+  '승강기',
+  '엘리베이터',
+  'eps',
+  'ps',
+  '덕트',
+  '주차램프',
+  '램프',
+  '공용',
+];
 
 function isSharedFacilityPurpose(value?: string): boolean {
-  const normalized = String(value ?? '').trim().replace(/\s+/g, '');
+  const normalized = String(value ?? '').trim().replace(/[\s()\-_/.,]/g, '').toLowerCase();
   if (!normalized) return false;
   return SHARED_FACILITY_KEYWORDS.some((keyword) => normalized.includes(keyword));
 }

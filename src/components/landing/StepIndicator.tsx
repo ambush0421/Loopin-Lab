@@ -5,9 +5,9 @@ interface StepIndicatorProps {
 }
 
 const STEPS = [
-  { id: 1, label: 'Search' },
-  { id: 2, label: 'Analyze' },
-  { id: 3, label: 'Quote' },
+  { id: 1, label: '검색' },
+  { id: 2, label: '분석' },
+  { id: 3, label: '견적' },
 ];
 
 export function StepIndicator({ currentStep }: StepIndicatorProps) {

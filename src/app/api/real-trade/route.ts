@@ -14,14 +14,83 @@ const OFFICETEL_TRADE_URL = 'https://apis.data.go.kr/1613000/RTMSDataSvcOffiTrad
 // 오피스텔 전월세 실거래가 API
 const OFFICETEL_RENT_URL = 'https://apis.data.go.kr/1613000/RTMSDataSvcOffiRent/getRTMSDataSvcOffiRent';
 
+type ApiResponse = {
+    response?: {
+        body?: {
+            items?: {
+                item?: unknown[] | unknown;
+            };
+        };
+    };
+};
+
+type TradeItem = Record<string, unknown>;
+
+type TradeStats = {
+    count: number;
+    avgPricePerPyung: number;
+    minPricePerPyung: number;
+    maxPricePerPyung: number;
+    recentTrades: Array<{
+        price: number;
+        area: number;
+        pyung: number;
+        pricePerPyung: number;
+        floor: string;
+        dealYear: string;
+        dealMonth: string;
+        dealDay: string;
+    }>;
+} | null;
+
+type RentStats = {
+    count: number;
+    avgDepositPerPyung: number;
+    avgMonthlyPerPyung: number;
+    recentRents: Array<{
+        deposit: number;
+        monthly: number;
+        area: number;
+        pyung: number;
+        depositPerPyung: number;
+        monthlyPerPyung: number;
+        floor: string;
+        dealYear: string;
+        dealMonth: string;
+    }>;
+} | null;
+
+type StatsResult = TradeStats | RentStats;
+
 // 입력값 검증
 function validateParam(value: string | null, maxLength: number = 10): string {
     if (!value) return '';
     return value.replace(/[^0-9]/g, '').substring(0, maxLength);
 }
 
+function toItems(value: unknown): TradeItem[] {
+    if (Array.isArray(value)) {
+        return value.filter((item): item is TradeItem => !!item && typeof item === 'object');
+    }
+    if (value && typeof value === 'object') {
+        return [value as TradeItem];
+    }
+    return [];
+}
+
+function toText(value: unknown): string {
+    return String(value ?? '').trim();
+}
+
+function toNumber(value: unknown): number {
+    const normalized = String(value ?? '').replace(/,/g, '').trim();
+    if (!normalized) return 0;
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
 // API 호출 함수
-async function fetchTradeData(url: string, params: Record<string, string>): Promise<any> {
+async function fetchTradeData(url: string, params: Record<string, string>): Promise<ApiResponse> {
     if (!API_KEY) throw new Error('API_CONFIG_ERROR');
 
     const serviceKey = encodeURIComponent(API_KEY);
@@ -52,7 +121,12 @@ async function fetchTradeData(url: string, params: Record<string, string>): Prom
         throw new Error('XML_RESPONSE');
     }
 
-    return JSON.parse(rawData);
+    const parsed: unknown = JSON.parse(rawData);
+    if (!parsed || typeof parsed !== 'object') {
+        throw new Error('INVALID_JSON');
+    }
+
+    return parsed as ApiResponse;
 }
 
 // 최근 12개월 거래 데이터 조회
@@ -61,7 +135,7 @@ async function fetchRecentTrades(
     apiUrl: string,
     buildingName?: string,
     dong?: string
-): Promise<any[]> {
+): Promise<TradeItem[]> {
     const now = new Date();
 
     // 최근 12개월 날짜 생성
@@ -75,17 +149,13 @@ async function fetchRecentTrades(
         months.map(async (dealYmd) => {
             try {
                 const data = await fetchTradeData(apiUrl, { LAWD_CD: lawdCd, DEAL_YMD: dealYmd });
-                let items = data.response?.body?.items?.item || [];
-
-                if (!Array.isArray(items)) {
-                    items = items ? [items] : [];
-                }
+                let items = toItems(data.response?.body?.items?.item);
 
                 // 통합 필터 (상업/오피스텔 공통 키 대응)
                 if (buildingName || dong) {
-                    items = items.filter((item: any) => {
-                        const itemDong = (item.법정동 || item.umdNm || '').replace(/\s/g, '');
-                        const itemName = (item.건물명 || item.offiNm || '').replace(/\s/g, '');
+                    items = items.filter((item) => {
+                        const itemDong = (toText(item.법정동) || toText(item.umdNm)).replace(/\s/g, '');
+                        const itemName = (toText(item.건물명) || toText(item.offiNm)).replace(/\s/g, '');
 
                         const matchDong = !dong || itemDong.includes(dong.replace(/\s/g, ''));
                         const matchName = !buildingName || itemName.includes(buildingName.replace(/\s/g, ''));
@@ -96,8 +166,9 @@ async function fetchRecentTrades(
                 }
 
                 return items;
-            } catch (e: any) {
-                logger.warn({ event: 'api.real_trade.month_error', dealYmd, error: e.message });
+            } catch (error: unknown) {
+                const message = error instanceof Error ? error.message : 'UNKNOWN';
+                logger.warn({ event: 'api.real_trade.month_error', dealYmd, error: message });
                 return []; // 실패 시 빈 배열 반환 (전체 실패 방지)
             }
         })
@@ -128,8 +199,8 @@ export async function GET(request: NextRequest) {
     logger.info({ event: 'api.real_trade.request', params: { lawdCd, buildingType, buildingName } });
 
     try {
-        let tradeData: any[] = [];
-        let rentData: any[] = [];
+        let tradeData: TradeItem[] = [];
+        let rentData: TradeItem[] = [];
 
         if (buildingType === 'officetel') {
             // 오피스텔 매매 + 전월세
@@ -169,10 +240,11 @@ export async function GET(request: NextRequest) {
             }
         });
 
-    } catch (error: any) {
-        logger.error({ event: 'api.real_trade.fatal_error', message: error.message });
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'UNKNOWN';
+        logger.error({ event: 'api.real_trade.fatal_error', message });
 
-        if (error.message === 'API_AUTH_ERROR' || error.message === 'API_CONFIG_ERROR') {
+        if (message === 'API_AUTH_ERROR' || message === 'API_CONFIG_ERROR') {
             return NextResponse.json({ error: '인증 오류' }, { status: 401 });
         }
 
@@ -181,12 +253,12 @@ export async function GET(request: NextRequest) {
 }
 
 // 통계 계산 함수
-function calculateStats(items: any[], type: 'trade' | 'rent') {
+function calculateStats(items: TradeItem[], type: 'trade' | 'rent'): StatsResult {
     if (!items || items.length === 0) return null;
 
     if (type === 'trade') {
         const prices = items
-            .map((item: any) => {
+            .map((item) => {
                 // 한글/영문 키 모두 대응
                 const rawPrice = item.거래금액 || item.dealAmount;
                 const rawArea = item.전용면적 || item.excluUseAr;
@@ -197,8 +269,8 @@ function calculateStats(items: any[], type: 'trade' | 'rent') {
 
                 if (!rawPrice || !rawArea) return null;
 
-                const price = parseInt(String(rawPrice).replace(/,/g, ''));
-                const area = parseFloat(rawArea);
+                const price = toNumber(rawPrice);
+                const area = toNumber(rawArea);
                 const pyung = area * 0.3025;
 
                 return {
@@ -212,7 +284,16 @@ function calculateStats(items: any[], type: 'trade' | 'rent') {
                     dealDay: String(day)
                 };
             })
-            .filter(Boolean) as any[];
+            .filter((value): value is {
+                price: number;
+                area: number;
+                pyung: number;
+                pricePerPyung: number;
+                floor: string;
+                dealYear: string;
+                dealMonth: string;
+                dealDay: string;
+            } => value !== null);
 
         if (prices.length === 0) return null;
 
@@ -226,10 +307,10 @@ function calculateStats(items: any[], type: 'trade' | 'rent') {
         };
     } else {
         const rents = items
-            .map((item: any) => {
-                const deposit = parseInt(String(item.보증금액 || item.보증금 || item.deposit || 0).replace(/,/g, ''));
-                const monthly = parseInt(String(item.월세금액 || item.월세 || item.monthlyRent || 0).replace(/,/g, ''));
-                const area = parseFloat(item.전용면적 || item.excluUseAr || 0);
+            .map((item) => {
+                const deposit = toNumber(item.보증금액 || item.보증금 || item.deposit || 0);
+                const monthly = toNumber(item.월세금액 || item.월세 || item.monthlyRent || 0);
+                const area = toNumber(item.전용면적 || item.excluUseAr || 0);
                 const pyung = area * 0.3025;
 
                 if (pyung <= 0) return null;
@@ -246,7 +327,17 @@ function calculateStats(items: any[], type: 'trade' | 'rent') {
                     dealMonth: String(item.월 || item.dealMonth)
                 };
             })
-            .filter(Boolean) as any[];
+            .filter((value): value is {
+                deposit: number;
+                monthly: number;
+                area: number;
+                pyung: number;
+                depositPerPyung: number;
+                monthlyPerPyung: number;
+                floor: string;
+                dealYear: string;
+                dealMonth: string;
+            } => value !== null);
 
         if (rents.length === 0) return null;
 

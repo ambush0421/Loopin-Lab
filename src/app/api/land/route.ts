@@ -5,6 +5,8 @@ export const runtime = 'edge';
 
 const API_URL = 'https://apis.data.go.kr/1613000/LndpSvc/getLndpInfo';
 
+type LandRawItem = Record<string, unknown>;
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const sigunguCd = searchParams.get('sigunguCd');
@@ -31,22 +33,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: '토지 API 인증 오류' }, { status: 401 });
     }
 
-    const data = JSON.parse(rawData);
+    const data = JSON.parse(rawData) as { response?: { body?: { items?: { item?: unknown[] | unknown } } } };
     const item = data.response?.body?.items?.item;
     if (!item) return NextResponse.json({ success: false, error: '토지 정보를 찾을 수 없습니다.' }, { status: 404 });
 
-    const b = Array.isArray(item) ? item[0] : item;
+    const b = (Array.isArray(item) ? item[0] : item) as LandRawItem | undefined;
+    if (!b || typeof b !== 'object') {
+      return NextResponse.json({ success: false, error: '토지 정보를 찾을 수 없습니다.' }, { status: 404 });
+    }
 
     return NextResponse.json({
       success: true,
       data: {
-        lndpclAr: Number(b.lndpclAr || 0),
-        lndMsclCdNm: b.lndMsclCdNm,
-        pannPrc: Number(b.pannPrc || 0),
+        lndpclAr: Number(b.lndpclAr ?? 0),
+        lndMsclCdNm: String(b.lndMsclCdNm ?? ''),
+        pannPrc: Number(b.pannPrc ?? 0),
       }
     });
-  } catch (error: any) {
-    logger.error({ event: 'api.land.error', message: error.message });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'UNKNOWN';
+    logger.error({ event: 'api.land.error', message });
     return NextResponse.json({ success: false, error: '토지 API 호출 오류' }, { status: 500 });
   }
 }
