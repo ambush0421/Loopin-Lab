@@ -1,25 +1,18 @@
 # Report: SEO Value-up
 
 ## What changed
-- 소셜 미리보기 품질 개선을 위해 동적 OG/Twitter 이미지 라우트를 추가했다.
-  - `src/app/opengraph-image.tsx`
-  - `src/app/twitter-image.tsx`
-- 루트 metadata에서 OG/Twitter 이미지 참조를 연결했다.
-  - `src/app/layout.tsx`
-- 운영 문서에 SEO 설정(검증 토큰/확인 URL) 안내를 추가했다.
-  - `README.md`
-- PDCA 산출물을 생성했다.
-  - `docs/pdca/seo-valueup/plan.md`
-  - `docs/pdca/seo-valueup/design.md`
-  - `docs/pdca/seo-valueup/tasks.md`
+- 코드베이스 SEO 상태를 재점검한 결과, 계획된 기술 SEO 항목(홈 전용 metadata 분리, OG/Twitter 이미지, robots/sitemap/manifest, noindex 정책)이 이미 반영되어 있음을 확인했다.
+- robots host 값을 URL 형식에서 도메인 형식으로 보정했다.
+  - `src/app/robots.ts` (`host: "building-report.pro"`)
+- 실행 검증 결과와 blocker를 `report.md`에 반영했다.
   - `docs/pdca/seo-valueup/report.md`
 
 ## How verified (commands + results)
 - Command:
-  - `set SystemRoot=C:\Windows&& set windir=C:\Windows&& set TEMP=C:\Windows\Temp&& set TMP=C:\Windows\Temp&& npx eslint src/app/layout.tsx src/app/opengraph-image.tsx src/app/twitter-image.tsx`
+  - `set SystemRoot=C:\Windows&& set windir=C:\Windows&& set TEMP=C:\Windows\Temp&& set TMP=C:\Windows\Temp&& npx eslint src/app/robots.ts`
 - Result:
   - 성공 (exit code 0)
-  - 변경 파일 scoped lint 통과
+  - `robots.ts` 변경 lint 통과
 
 - Command:
   - `set SystemRoot=C:\Windows&& set windir=C:\Windows&& set TEMP=C:\Windows\Temp&& set TMP=C:\Windows\Temp&& npm run lint`
@@ -32,16 +25,16 @@
   - `set SystemRoot=C:\Windows&& set windir=C:\Windows&& set TEMP=C:\Windows\Temp&& set TMP=C:\Windows\Temp&& npm run build`
 - Result:
   - 실패 (exit code 1)
+  - `next build && npx @cloudflare/next-on-pages` 파이프라인에서 `next build` 단계 실패
   - 위치: `/share/[id]` page data 수집 단계
   - 에러: `TypeError: (0 , ai.createContext) is not a function`
   - 판단: `/share/[id]`의 기존 런타임 의존성 이슈로 보이며, 이번 SEO 변경과 직접 연관 없음
 
 ## Risks / rollback notes
-- OG/Twitter 이미지가 동적 렌더링이므로 추후 브랜딩 변경 시 텍스트/컬러를 일관되게 관리해야 한다.
-- 소셜 크롤러 캐시가 남아 초기 반영 지연이 있을 수 있다.
-- 롤백은 `layout.tsx`의 `images` 참조 제거와 이미지 라우트 파일 삭제로 즉시 가능하다.
+- 코드 변경 범위가 `robots.ts` 1라인이라 롤백 리스크는 낮다.
+- 롤백은 `src/app/robots.ts`의 `host` 값을 이전 URL 형식으로 복원하면 된다.
 
 ## Next actions
 1. `/share/[id]` 빌드 blocker(`ai.createContext`) 원인 패키지/런타임 경계를 분리해 해결한다.
 2. `.bkit-codex/**` 포함 여부를 lint 스코프에서 재정의해 전역 lint 기준을 안정화한다.
-3. 배포 후 Search Console/네이버에서 `robots/sitemap/미리보기 이미지` 실제 반영 상태를 점검한다.
+3. Search Console/네이버 서치어드바이저에서 `robots.txt` 재수집을 요청해 host 반영 상태를 확인한다.
