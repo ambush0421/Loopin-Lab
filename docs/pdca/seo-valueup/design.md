@@ -5,6 +5,9 @@
   - 전역 metadata(robots/googleBot/verification/themeColor/keywords) 보강
   - 전역 JSON-LD(`Organization`, `WebSite`) 삽입
   - 잘못된 전역 canonical 수동 태그 제거
+- `src/app/page.tsx` + `src/app/HomePageClient.tsx`
+  - 홈 페이지를 서버 래퍼 + 클라이언트 본문으로 분리
+  - 홈 전용 canonical/OG/Twitter metadata를 명시
 - `src/app/robots.ts`
   - 검색엔진 크롤러 규칙 정의
   - 내부/개인화 경로(`dashboard/report/share/api`) 크롤링 제외
@@ -34,9 +37,9 @@
 
 ## Test plan
 - Command:
-  - `npx eslint src/app/layout.tsx src/app/robots.ts src/app/sitemap.ts src/app/manifest.ts src/app/share/[id]/page.tsx src/app/about/page.tsx src/app/guide/page.tsx src/app/privacy/page.tsx src/app/terms/page.tsx src/app/dashboard/head.tsx src/app/dashboard/compare/head.tsx src/app/report/head.tsx src/app/report/[id]/head.tsx`
+  - `npx eslint src/app/page.tsx src/app/HomePageClient.tsx`
 - Expected:
-  - 변경 파일 scoped lint 통과
+  - 신규 래퍼는 통과하고, 기존 코드 이동 파일의 legacy lint blocker를 식별
 
 - Command:
   - `npm run lint`
