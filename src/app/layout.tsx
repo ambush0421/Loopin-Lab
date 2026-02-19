@@ -56,11 +56,20 @@ export const metadata: Metadata = {
     siteName,
     locale: "ko_KR",
     type: "website",
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "BuildingReportPro - AI 부동산 분석 리포트",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: defaultTitle,
     description: defaultDescription,
+    images: ["/twitter-image"],
   },
   robots: {
     index: true,

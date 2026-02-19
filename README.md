@@ -29,6 +29,24 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## SEO / 검색엔진 설정
+
+- 본 프로젝트는 App Router 기반 메타 라우트를 사용합니다.
+  - `src/app/robots.ts`
+  - `src/app/sitemap.ts`
+  - `src/app/manifest.ts`
+- Search Console / 네이버 서치어드바이저 인증 메타는 아래 환경변수로 주입합니다.
+
+```bash
+NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION=your_google_token
+NEXT_PUBLIC_NAVER_SITE_VERIFICATION=your_naver_token
+```
+
+- 배포 후 확인 URL:
+  - `https://<domain>/robots.txt`
+  - `https://<domain>/sitemap.xml`
+  - `https://<domain>/manifest.webmanifest`
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
