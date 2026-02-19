@@ -116,6 +116,24 @@ const MARKET_RATES: Record<string, { buy: number; rent_deposit: number; rent_mon
   '근린생활시설': { buy: 900, rent_deposit: 25000, rent_monthly: 40 },
 };
 
+const SHARED_FACILITY_KEYWORDS = ['계단실', '기계실', '전기실'];
+
+function isSharedFacilityPurpose(value?: string): boolean {
+  const normalized = String(value ?? '').trim().replace(/\s+/g, '');
+  if (!normalized) return false;
+  return SHARED_FACILITY_KEYWORDS.some((keyword) => normalized.includes(keyword));
+}
+
+function resolveUsageLabel(etcPurps?: string, mainPurpsCdNm?: string, fallback = '-'): string {
+  const etc = String(etcPurps ?? '').trim();
+  const main = String(mainPurpsCdNm ?? '').trim();
+  if (!etc) return main || fallback;
+  if (isSharedFacilityPurpose(etc) && main && !isSharedFacilityPurpose(main)) {
+    return main;
+  }
+  return etc || main || fallback;
+}
+
 function detectBuildingType(data: BuildingData): string {
   const purpose = data.mainPurpsCdNm || '';
   for (const key of Object.keys(MARKET_RATES)) {
@@ -185,7 +203,7 @@ export function generateEstimate(
       exclusiveArea: Math.round(exclusiveArea * 10) / 10,
       supplyArea: Math.round(supplyArea * 10) / 10,
       pyeong: Math.round(pyeong * 10) / 10,
-      usage: unit.etcPurps || unit.mainPurpsCdNm || buildingType,
+      usage: resolveUsageLabel(unit.etcPurps, unit.mainPurpsCdNm, buildingType),
       buy: {
         pricePerArea: rates.buy,
         totalPrice: buyPrice,

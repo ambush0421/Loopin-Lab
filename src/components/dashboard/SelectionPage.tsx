@@ -22,8 +22,8 @@ type UnitRow = Record<string, unknown> & {
     flrGbCd?: string;          // 층구분코드 (10=지하, 20=지상)
     hoNm: string;
     area: string | number;
-    commonArea?: number;       // 공용면적 합산
-    contractArea?: number;     // 계약면적 (전용+공용)
+    commonArea?: string | number; // 공용면적 합산
+    contractArea?: string | number; // 계약면적 (전용+공용)
     exposPubuseGbCd?: string;  // 전유/공용 구분코드
     etcPurps?: string;
     mainPurpsCdNm?: string;
@@ -71,6 +71,112 @@ interface SelectionPageProps {
 // ==========================================
 
 const formatNumber = (num: number) => num.toLocaleString();
+
+type HoToken = { type: 'num' | 'text'; value: string; num?: number };
+
+const tokenizeHo = (raw: string): HoToken[] => {
+    const normalized = raw
+        .trim()
+        .replace(/\s+/g, '')
+        .replace(/호$/u, '');
+    const matches = normalized.match(/(\d+|[A-Za-z가-힣]+)/gu);
+    if (!matches) {
+        return [{ type: 'text', value: normalized }];
+    }
+    return matches.map((part) => {
+        if (/^\d+$/u.test(part)) {
+            return { type: 'num', value: part, num: Number(part) };
+        }
+        return { type: 'text', value: part.toUpperCase() };
+    });
+};
+
+const compareHoName = (a: string, b: string): number => {
+    const ta = tokenizeHo(a);
+    const tb = tokenizeHo(b);
+    const maxLen = Math.max(ta.length, tb.length);
+
+    for (let i = 0; i < maxLen; i += 1) {
+        const pa = ta[i];
+        const pb = tb[i];
+        if (!pa && pb) return -1;
+        if (pa && !pb) return 1;
+        if (!pa || !pb) continue;
+
+        if (pa.type === 'num' && pb.type === 'num') {
+            if ((pa.num ?? 0) !== (pb.num ?? 0)) {
+                return (pa.num ?? 0) - (pb.num ?? 0);
+            }
+            if (pa.value.length !== pb.value.length) {
+                return pa.value.length - pb.value.length;
+            }
+            continue;
+        }
+        if (pa.type === 'text' && pb.type === 'text') {
+            const compared = pa.value.localeCompare(pb.value, 'ko');
+            if (compared !== 0) return compared;
+            continue;
+        }
+        if (pa.type === 'text') return -1;
+        return 1;
+    }
+
+    return a.localeCompare(b, 'ko');
+};
+
+const getM2RawText = (value: unknown): string => {
+    const raw = String(value ?? '').replace(/,/g, '').trim();
+    if (!raw) return '0';
+    if (/^-?\d+(\.\d+)?$/.test(raw)) return raw;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed.toString() : '0';
+};
+
+const formatM2Fixed2 = (value: unknown): string => {
+    const m2 = Number(getM2RawText(value));
+    if (!Number.isFinite(m2)) return '0.00';
+    return m2.toFixed(2);
+};
+
+const SHARED_FACILITY_KEYWORDS = ['계단실', '기계실', '전기실'];
+
+const isSharedFacilityPurpose = (value: unknown): boolean => {
+    const normalized = String(value ?? '').trim().replace(/\s+/g, '');
+    if (!normalized) return false;
+    return SHARED_FACILITY_KEYWORDS.some((keyword) => normalized.includes(keyword));
+};
+
+const getUnitUsageLabel = (unit: UnitRow): string => {
+    const etc = String(unit.etcPurps ?? '').trim();
+    const main = String(unit.mainPurpsCdNm ?? '').trim();
+    if (!etc) return main || '-';
+    if (isSharedFacilityPurpose(etc) && main && !isSharedFacilityPurpose(main)) {
+        return main;
+    }
+    return etc || main || '-';
+};
+
+const addDecimalStrings = (a: string, b: string): string => {
+    const [aIntRaw, aFracRaw = ''] = a.split('.');
+    const [bIntRaw, bFracRaw = ''] = b.split('.');
+    const scale = Math.max(aFracRaw.length, bFracRaw.length);
+    const base = BigInt(`1${'0'.repeat(scale)}`);
+    const toScaled = (intRaw: string, fracRaw: string): bigint => {
+        const isNegative = intRaw.startsWith('-');
+        const unsignedInt = isNegative ? intRaw.slice(1) : intRaw;
+        const scaledStr = `${unsignedInt || '0'}${fracRaw.padEnd(scale, '0')}`;
+        const scaled = BigInt(scaledStr);
+        return isNegative ? -scaled : scaled;
+    };
+    const sum = toScaled(aIntRaw, aFracRaw) + toScaled(bIntRaw, bFracRaw);
+    if (scale === 0) return sum.toString();
+    const zero = BigInt(0);
+    const sign = sum < zero ? '-' : '';
+    const abs = sum < zero ? -sum : sum;
+    const intPart = (abs / base).toString();
+    const fracPart = (abs % base).toString().padStart(scale, '0').replace(/0+$/, '');
+    return fracPart ? `${sign}${intPart}.${fracPart}` : `${sign}${intPart}`;
+};
 
 // ==========================================
 // InfoCard 컴포넌트
@@ -121,7 +227,6 @@ export function SelectionPage({
     postcodeRef,
     onClosePostcode,
     searchWrapperRef,
-    daumReady,
 }: SelectionPageProps) {
     const [activeFloorFilter, setActiveFloorFilter] = useState<string | number>('all');
     const [activeDongFilter, setActiveDongFilter] = useState<string>('all');
@@ -242,7 +347,10 @@ export function SelectionPage({
         });
         return Array.from(floorMap.entries())
             .sort((a, b) => b[0] - a[0])
-            .map(([floorLevel, floorUnits]) => ({ floorLevel, units: floorUnits }));
+            .map(([floorLevel, floorUnits]) => ({
+                floorLevel,
+                units: [...floorUnits].sort((a, b) => compareHoName(a.hoNm, b.hoNm)),
+            }));
     }, [units, activeDongFilter, dongSource]);
 
     // 필터링
@@ -255,6 +363,28 @@ export function SelectionPage({
 
     // 선택된 유닛 목록
     const selectedUnits = useMemo(() => units.filter((u) => selectedIds.has(u._uid)), [units, selectedIds]);
+
+    const selectedAreaSummary = useMemo(() => {
+        const exclusiveM2Raw = selectedUnits.reduce(
+            (sum, unit) => addDecimalStrings(sum, getM2RawText(unit.area)),
+            '0',
+        );
+        const contractM2Raw = selectedUnits.reduce(
+            (sum, unit) => addDecimalStrings(sum, getM2RawText(unit.contractArea ?? unit.area)),
+            '0',
+        );
+        const toPyFixed2 = (m2Value: string): string => {
+            const m2 = Number(m2Value);
+            if (!Number.isFinite(m2)) return '0.00';
+            return (m2 * 0.3025).toFixed(2);
+        };
+        return {
+            exclusiveM2: formatM2Fixed2(exclusiveM2Raw),
+            contractM2: formatM2Fixed2(contractM2Raw),
+            exclusivePy: toPyFixed2(exclusiveM2Raw),
+            contractPy: toPyFixed2(contractM2Raw),
+        };
+    }, [selectedUnits]);
 
     // 호실 토글
     const toggleUnit = (unit: UnitRow) => {
@@ -283,24 +413,22 @@ export function SelectionPage({
     const getAreaPy = (unit: UnitRow): string => {
         const val = Number(unit.area) || 0;
         const py = val * 0.3025;
-        return py % 1 === 0 ? py.toFixed(0) : parseFloat(py.toFixed(2)).toString();
+        return py.toFixed(2);
     };
 
     const getAreaM2 = (unit: UnitRow): string => {
-        const val = Number(unit.area) || 0;
-        return val % 1 === 0 ? val.toFixed(0) : parseFloat(val.toFixed(2)).toString();
+        return formatM2Fixed2(unit.area);
     };
 
     // 계약면적 (전용+공용) - 건축물대장 원본 소수점 유지
     const getContractAreaPy = (unit: UnitRow): string => {
         const val = Number(unit.contractArea) || Number(unit.area) || 0;
         const py = val * 0.3025;
-        return py % 1 === 0 ? py.toFixed(0) : parseFloat(py.toFixed(2)).toString();
+        return py.toFixed(2);
     };
 
     const getContractAreaM2 = (unit: UnitRow): string => {
-        const val = Number(unit.contractArea) || Number(unit.area) || 0;
-        return val % 1 === 0 ? val.toFixed(0) : parseFloat(val.toFixed(2)).toString();
+        return formatM2Fixed2(unit.contractArea ?? unit.area);
     };
 
     // 층 레이블 포맷팅 (지하층: -1 → B1F, 지상층: 3 → 3F)
@@ -313,7 +441,7 @@ export function SelectionPage({
     if (!buildingInfo) return null;
 
     return (
-        <div className="flex h-screen bg-[#F7F9FC] overflow-hidden font-sans">
+        <div className="flex min-h-screen bg-[#F7F9FC] font-sans">
 
             {/* 1. Left Sidebar */}
             <aside className="w-[300px] bg-white border-r border-slate-200 flex flex-col z-20 shrink-0 hidden lg:flex">
@@ -368,7 +496,7 @@ export function SelectionPage({
                                         <div className="flex items-center gap-2 font-bold text-slate-700">
                                             <span>선택 {selectedUnits.length}개</span>
                                             <span className="text-slate-300 font-normal">|</span>
-                                            <span>{Math.floor(selectedUnits.reduce((a, u) => a + parseFloat(getAreaPy(u)), 0))}평</span>
+                                            <span>{selectedAreaSummary.exclusivePy}평</span>
                                         </div>
                                         <div className="text-[10px] text-slate-400">{buildingInfo.usage} · {buildingInfo.age}</div>
                                     </div>
@@ -380,7 +508,7 @@ export function SelectionPage({
             </aside>
 
             {/* 2. Main Content Area */}
-            <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+            <div className="flex-1 flex flex-col relative">
 
                 {/* Header */}
                 <header className="bg-white border-b border-slate-200 h-[72px] flex items-center justify-between px-6 z-10 shrink-0">
@@ -423,7 +551,6 @@ export function SelectionPage({
                                     type="text"
                                     value={addressInput}
                                     onChange={(e) => setAddressInput(e.target.value)}
-                                    onFocus={() => { if (daumReady) onSearch(); }}
                                     onKeyDown={(e) => { if (e.key === 'Enter' && addressInput.trim()) onSearch(); }}
                                     placeholder="새 주소 검색..."
                                     className="py-1.5 pl-2 pr-4 text-xs w-[240px] outline-none text-slate-600"
@@ -451,7 +578,7 @@ export function SelectionPage({
                 </header>
 
                 {/* Scrollable Main Body */}
-                <main className="flex-1 overflow-y-auto p-6 md:p-8 bg-[#F7F9FC]">
+                <main className="flex-1 p-6 md:p-8 bg-[#F7F9FC]">
                     <div className="max-w-[1400px] mx-auto space-y-6 pb-32">
 
                         {/* Building Title */}
@@ -582,7 +709,7 @@ export function SelectionPage({
                                     </div>
 
                                     {/* Content Area */}
-                                    <div className="flex-1 overflow-y-auto bg-slate-50/50 p-6 min-h-[500px]">
+                                    <div className="flex-1 bg-slate-50/50 p-6 min-h-[500px]">
 
                                         {/* Grid View */}
                                         {viewMode === 'grid' && (
@@ -670,7 +797,7 @@ export function SelectionPage({
                                                                     </td>
                                                                     <td className="p-4 text-right text-slate-500">
                                                                         <span className="bg-slate-100 px-2 py-1 rounded text-xs text-slate-600 border border-slate-200">
-                                                                            {unit.etcPurps || unit.mainPurpsCdNm || '-'}
+                                                                            {getUnitUsageLabel(unit)}
                                                                         </span>
                                                                     </td>
                                                                 </tr>
@@ -689,7 +816,7 @@ export function SelectionPage({
                     {/* Floating Action Bar */}
                     {selectedUnits.length > 0 && (
                         <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 lg:ml-[150px] z-50 animate-in slide-in-from-bottom-8 duration-400">
-                            <div className="bg-[#2D323E] text-white rounded-2xl shadow-2xl flex items-center p-3 pl-8 pr-3 gap-8 border border-slate-700/50 min-w-[600px]">
+                            <div className="bg-[#2D323E] text-white rounded-2xl shadow-2xl flex items-center p-3 pl-8 pr-3 gap-8 border border-slate-700/50 min-w-[840px]">
                                 <div className="flex gap-8 items-center flex-1">
                                     <div className="flex flex-col">
                                         <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">선택 호실</span>
@@ -699,8 +826,17 @@ export function SelectionPage({
                                     <div className="flex flex-col">
                                         <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider mb-1">총 전용면적</span>
                                         <div className="font-bold text-2xl leading-none">
-                                            {formatNumber(Math.floor(selectedUnits.reduce((acc, u) => acc + parseFloat(getAreaPy(u)), 0)))} <span className="text-sm font-normal text-slate-400">평</span>
+                                            {selectedAreaSummary.exclusivePy} <span className="text-sm font-normal text-slate-400">평</span>
                                         </div>
+                                        <div className="text-[11px] text-slate-400 mt-1">{selectedAreaSummary.exclusiveM2}㎡</div>
+                                    </div>
+                                    <div className="w-[1px] bg-slate-600 h-10 self-center"></div>
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] text-cyan-300 font-bold uppercase tracking-wider mb-1">총 계약면적</span>
+                                        <div className="font-bold text-2xl leading-none">
+                                            {selectedAreaSummary.contractPy} <span className="text-sm font-normal text-slate-400">평</span>
+                                        </div>
+                                        <div className="text-[11px] text-slate-400 mt-1">{selectedAreaSummary.contractM2}㎡</div>
                                     </div>
 
                                     {/* Floor Chips */}

@@ -58,8 +58,8 @@ type UnitRow = Record<string, unknown> & {
   flrGbCd?: string;          // 층구분코드 (10=지하, 20=지상)
   hoNm: string;
   area: string | number;
-  commonArea?: number;       // 공용면적 합산
-  contractArea?: number;     // 계약면적 (전용+공용)
+  commonArea?: string | number; // 공용면적 합산
+  contractArea?: string | number; // 계약면적 (전용+공용)
   exposPubuseGbCd?: string;  // 전유/공용 구분코드 (1=전유, 2=공용)
   etcPurps?: string;
   mainPurpsCdNm?: string;
@@ -381,49 +381,167 @@ export default function Home() {
       const unitList = Array.isArray(rawUnits) ? rawUnits : [rawUnits];
 
       // ── 전유/공용 면적 그룹핑 ──
-      // API는 호실마다 전유(exposPubuseGbCd=1) + 공용(exposPubuseGbCd=2) 별도 행으로 반환
-      // 같은 동/호(mgmBldrgstPk 기준)의 공용 면적을 합산하여 계약면적 산출
+      // API는 동/호별로 전유(코드 1) + 공용(코드 2) 행을 별도로 제공하는 구조
+      // key를 동+호로 통일해서 전용/공용 합산값을 하나의 호실로 재조합
       type RawUnit = Record<string, unknown>;
+      type GroupedUnit = {
+        raw: RawUnit;
+        dongNm: string;
+        hoNm: string;
+        flrNo: number;
+        flrGbCd: string;
+        hasExclusive: boolean;
+        exclusiveArea: string;
+        commonArea: string;
+        etcPurps?: string;
+        mainPurpsCdNm?: string;
+      };
+
       const rawUnitsTyped: RawUnit[] = unitList.map(
         u => (typeof u === 'object' && u !== null ? u : {}) as RawUnit
       );
 
-      // 전유 레코드만 추출
-      const exclusiveUnits = rawUnitsTyped.filter(
-        u => String(u.exposPubuseGbCd ?? '').trim() === '1'
-      );
+      const normalizeUnitText = (value: unknown): string => String(value ?? '').trim();
+      const normalizeUnitNumber = (value: unknown): number => Number(value ?? 0) || 0;
+      const SHARED_FACILITY_KEYWORDS = ['계단실', '기계실', '전기실'];
+      const isSharedFacilityPurpose = (value: unknown): boolean => {
+        const normalized = normalizeUnitText(value).replace(/\s+/g, '');
+        if (!normalized) return false;
+        return SHARED_FACILITY_KEYWORDS.some((keyword) => normalized.includes(keyword));
+      };
+      const pickPreferredPurpose = (currentRaw: unknown, candidateRaw: unknown): string => {
+        const current = normalizeUnitText(currentRaw);
+        const candidate = normalizeUnitText(candidateRaw);
+        if (!candidate) return current;
+        if (!current) return candidate;
+        const currentShared = isSharedFacilityPurpose(current);
+        const candidateShared = isSharedFacilityPurpose(candidate);
+        if (currentShared && !candidateShared) return candidate;
+        if (!currentShared && candidateShared) return current;
+        return current.length >= candidate.length ? current : candidate;
+      };
+      const resolvePurpose = (etcRaw: unknown, mainRaw: unknown): string => {
+        const etc = normalizeUnitText(etcRaw);
+        const main = normalizeUnitText(mainRaw);
+        if (!etc) return main;
+        if (isSharedFacilityPurpose(etc) && main && !isSharedFacilityPurpose(main)) {
+          return main;
+        }
+        return etc || main;
+      };
+      const getHoFloorCandidate = (hoNm: string): number | null => {
+        const normalized = hoNm.replace(/\s+/g, '').replace(/호$/u, '');
+        if (!normalized) return null;
+        if (/^(B|지하)/iu.test(normalized)) return null;
 
-      // 공용 레코드를 mgmBldrgstPk 기준으로 그룹핑하여 면적 합산
-      const commonAreaMap = new Map<string | number, number>();
-      rawUnitsTyped
-        .filter(u => String(u.exposPubuseGbCd ?? '').trim() === '2')
-        .forEach(u => {
-          const key = u.mgmBldrgstPk as string | number;
-          const prev = commonAreaMap.get(key) || 0;
-          commonAreaMap.set(key, prev + (Number(u.area) || 0));
-        });
+        const baseToken = normalized.split('-')[0] ?? normalized;
+        const digits = baseToken.replace(/\D/g, '');
+        if (digits.length < 3) return null;
 
-      const processedUnits: UnitRow[] = exclusiveUnits.map((u, idx) => {
-        const mgmKey = u.mgmBldrgstPk as string | number;
-        const exclusiveArea = Number(u.area) || 0;
-        const commonArea = commonAreaMap.get(mgmKey) || 0;
-        const contractArea = Math.round((exclusiveArea + commonArea) * 100) / 100;
-        // 지하층 처리: flrGbCd="10"이면 flrNo를 음수로 변환
-        const rawFlrNo = Number(u.flrNo) || 0;
-        const flrGbCd = String(u.flrGbCd ?? '').trim();
-        const flrNo = flrGbCd === '10' ? -rawFlrNo : rawFlrNo;
-        return {
-          ...u,
-          flrNo,
-          flrGbCd,
-          hoNm: String(u.hoNm ?? '-'),
-          area: exclusiveArea,
-          commonArea,
-          contractArea,
-          exposPubuseGbCd: '1',
-          _uid: `${String(u.dongNm ?? '')}-${flrNo}-${String(u.hoNm ?? '')}-${String(u.area ?? '')}-${String(u.etcPurps ?? u.mainPurpsCdNm ?? '')}-${idx}`
+        const floorDigits = digits.slice(0, -2);
+        const floor = Number(floorDigits);
+        if (!Number.isFinite(floor) || floor <= 0) return null;
+        return floor;
+      };
+      const normalizeUnitDecimal = (value: unknown): string => {
+        const raw = String(value ?? '').replace(/,/g, '').trim();
+        if (!raw) return '0';
+        if (/^-?\d+(\.\d+)?$/.test(raw)) return raw;
+        const parsed = Number(raw);
+        return Number.isFinite(parsed) ? parsed.toString() : '0';
+      };
+      const addDecimalStrings = (a: string, b: string): string => {
+        const [aIntRaw, aFracRaw = ''] = a.split('.');
+        const [bIntRaw, bFracRaw = ''] = b.split('.');
+        const scale = Math.max(aFracRaw.length, bFracRaw.length);
+        const base = BigInt(`1${'0'.repeat(scale)}`);
+        const toScaled = (intRaw: string, fracRaw: string): bigint => {
+          const isNegative = intRaw.startsWith('-');
+          const unsignedInt = isNegative ? intRaw.slice(1) : intRaw;
+          const scaledStr = `${unsignedInt || '0'}${fracRaw.padEnd(scale, '0')}`;
+          const scaled = BigInt(scaledStr);
+          return isNegative ? -scaled : scaled;
         };
+        const sum = toScaled(aIntRaw, aFracRaw) + toScaled(bIntRaw, bFracRaw);
+        if (scale === 0) return sum.toString();
+        const zero = BigInt(0);
+        const sign = sum < zero ? '-' : '';
+        const abs = sum < zero ? -sum : sum;
+        const intPart = (abs / base).toString();
+        const fracPart = (abs % base).toString().padStart(scale, '0').replace(/0+$/, '');
+        return fracPart ? `${sign}${intPart}.${fracPart}` : `${sign}${intPart}`;
+      };
+      const getGroupKey = (unit: RawUnit) => `${normalizeUnitText(unit.dongNm)}_${normalizeUnitText(unit.hoNm)}`;
+
+      const groupedUnits = new Map<string, GroupedUnit>();
+
+      rawUnitsTyped.forEach((unit) => {
+        const key = getGroupKey(unit);
+        const existing = groupedUnits.get(key) ?? {
+          raw: unit,
+          dongNm: normalizeUnitText(unit.dongNm),
+          hoNm: normalizeUnitText(unit.hoNm) || '-',
+          flrNo: normalizeUnitNumber(unit.flrNo),
+          flrGbCd: normalizeUnitText(unit.flrGbCd),
+          hasExclusive: false,
+          exclusiveArea: '0',
+          commonArea: '0',
+          etcPurps: normalizeUnitText(unit.etcPurps),
+          mainPurpsCdNm: normalizeUnitText(unit.mainPurpsCdNm),
+        };
+
+        const area = normalizeUnitDecimal(unit.area);
+        const typeCode = normalizeUnitText(unit.exposPubuseGbCd);
+
+        if (typeCode === '1') {
+          existing.hasExclusive = true;
+          existing.exclusiveArea = addDecimalStrings(existing.exclusiveArea, area);
+        }
+        if (typeCode === '2') {
+          existing.commonArea = addDecimalStrings(existing.commonArea, area);
+        }
+
+        if (!existing.flrNo && unit.flrNo) {
+          existing.flrNo = normalizeUnitNumber(unit.flrNo);
+        }
+        if (!existing.flrGbCd && unit.flrGbCd) {
+          existing.flrGbCd = normalizeUnitText(unit.flrGbCd);
+        }
+        existing.etcPurps = pickPreferredPurpose(existing.etcPurps, unit.etcPurps);
+        existing.mainPurpsCdNm = pickPreferredPurpose(existing.mainPurpsCdNm, unit.mainPurpsCdNm);
+
+        groupedUnits.set(key, existing);
       });
+
+      const processedUnits: UnitRow[] = Array.from(groupedUnits.values())
+        .filter((unit) => unit.hasExclusive)
+        .map((unit, idx) => {
+          const rawFlrNo = unit.flrNo || 0;
+          const flrGbCd = unit.flrGbCd;
+          const hoFloorCandidate = getHoFloorCandidate(unit.hoNm);
+          const shouldTreatAsGroundFloor =
+            flrGbCd === '10'
+            && rawFlrNo > 0
+            && hoFloorCandidate !== null
+            && hoFloorCandidate === rawFlrNo;
+          const normalizedFlrGbCd = shouldTreatAsGroundFloor ? '20' : flrGbCd;
+          const flrNo = normalizedFlrGbCd === '10' ? -rawFlrNo : rawFlrNo;
+          const contractArea = addDecimalStrings(unit.exclusiveArea, unit.commonArea);
+          const purpose = resolvePurpose(unit.etcPurps, unit.mainPurpsCdNm);
+          return {
+            ...unit.raw,
+            flrNo,
+            flrGbCd: normalizedFlrGbCd,
+            hoNm: unit.hoNm,
+            area: unit.exclusiveArea,
+            commonArea: unit.commonArea,
+            contractArea,
+            etcPurps: purpose,
+            mainPurpsCdNm: unit.mainPurpsCdNm,
+            exposPubuseGbCd: '1',
+            _uid: `${unit.dongNm}-${flrNo}-${unit.hoNm}-${String(unit.exclusiveArea)}-${String(purpose || unit.mainPurpsCdNm || '')}-${idx}`,
+          };
+        });
 
       setUnits(processedUnits);
 
