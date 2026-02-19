@@ -6,11 +6,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useBuildingStore } from '@/stores/buildingStore';
 import { useRoomStore } from '@/stores/roomStore';
 
-declare global {
-  interface Window {
-    daum: any;
-  }
-}
+// Window.daum 타입은 page.tsx의 declare global에서 DaumNamespace로 이미 선언됨
+// 여기서는 별도의 인터페이스 없이 전역 타입을 사용
 
 const AddressSearch: React.FC = () => {
   const { fetchBuildingData, address, isLoading, loadingStep, error, reset: resetBuilding } = useBuildingStore();
@@ -24,19 +21,19 @@ const AddressSearch: React.FC = () => {
     script.async = true;
     script.onload = () => setScriptLoaded(true);
     document.body.appendChild(script);
-    
+
     return () => {
       document.body.removeChild(script);
     };
   }, []);
 
   const handleSearch = () => {
-    if (!scriptLoaded || !window.daum) return;
+    if (!scriptLoaded || !window.daum?.Postcode) return;
 
     new window.daum.Postcode({
-      oncomplete: async (data: any) => {
+      oncomplete: async (data) => {
         const { roadAddress, jibunAddress, bcode, buildingCode } = data;
-        
+
         try {
           const rooms = await fetchBuildingData(roadAddress, buildingCode, bcode, jibunAddress);
           setAllRooms(rooms);
@@ -62,8 +59,8 @@ const AddressSearch: React.FC = () => {
       </div>
 
       <div className="flex gap-2">
-        <Button 
-          onClick={handleSearch} 
+        <Button
+          onClick={handleSearch}
           className="flex-1 h-14 text-lg font-semibold shadow-md"
           disabled={isLoading}
         >
