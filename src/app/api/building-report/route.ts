@@ -53,11 +53,11 @@ export async function GET(request: NextRequest) {
 
   const serviceKey = process.env.BUILDING_API_KEY;
   // [15134735] 국토교통부_건축HUB_건축물대장정보 서비스
-  const url = `https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo`;
+  const url = `http://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo`;
 
   try {
     const queryParams = [
-      `serviceKey=${serviceKey}`, 
+      `serviceKey=${serviceKey}`,
       `sigunguCd=${sigunguCd}`,
       `bjdongCd=${bjdongCd}`,
       `bun=${bun.padStart(4, '0')}`,
@@ -114,8 +114,8 @@ export async function GET(request: NextRequest) {
     const reportItems: BuildingReportItem[] = itemList.map((item) => {
       // Log missing critical fields
       if (!item.vlrtBldRgstYn && item.vlrtBldRgstYn !== '0') {
-         // Some APIs omit this if 'N' or empty. We'll treat as clean but log debug.
-         // logger.debug({ event: 'building_report.field_missing', field: 'vlrtBldRgstYn', pk: item.mgmBldrgstPk });
+        // Some APIs omit this if 'N' or empty. We'll treat as clean but log debug.
+        // logger.debug({ event: 'building_report.field_missing', field: 'vlrtBldRgstYn', pk: item.mgmBldrgstPk });
       }
 
       return {

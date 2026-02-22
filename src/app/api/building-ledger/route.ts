@@ -3,7 +3,7 @@ export const runtime = 'edge';
 import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 
-const BASE_URL = 'https://apis.data.go.kr/1613000/BldRgstHubService';
+const BASE_URL = 'http://apis.data.go.kr/1613000/BldRgstHubService';
 
 function getApiKey() {
     return process.env.BUILDING_API_KEY || '';
@@ -13,14 +13,14 @@ async function fetchFromApi(endpoint: string, params: Record<string, string>) {
     const key = getApiKey();
     if (!key) throw new Error('API Key is missing');
 
+    const serviceKey = encodeURIComponent(key);
     const searchParams = new URLSearchParams({
-        serviceKey: key,
         _type: 'json',
         numOfRows: '9999',
         ...params
     });
 
-    const url = `${BASE_URL}${endpoint}?${searchParams.toString()}`;
+    const url = `${BASE_URL}${endpoint}?serviceKey=${serviceKey}&${searchParams.toString()}`;
     const res = await fetch(url);
     if (!res.ok) {
         throw new Error(`API fetch failed: ${res.statusText}`);

@@ -4,7 +4,7 @@ import { logger } from '@/lib/logger';
 
 // 보안: API 키는 환경 변수에서만 로드 (절대 클라이언트에 노출되지 않음)
 const API_KEY = process.env.BUILDING_API_KEY;
-const BASE_URL = 'https://apis.data.go.kr/1613000/BldRgstHubService/getBrExposPubuseAreaInfo';
+const BASE_URL = 'http://apis.data.go.kr/1613000/BldRgstHubService/getBrExposPubuseAreaInfo';
 
 const PAGE_SIZE = 100;
 const MAX_PAGES = 150;

@@ -2,7 +2,7 @@ import axios from 'axios';
 import { BuildingSummary } from '@/types/building';
 import { Room } from '@/types/room';
 
-const BASE_URL = 'https://apis.data.go.kr/1613000/BldRgstHubService';
+const BASE_URL = 'http://apis.data.go.kr/1613000/BldRgstHubService';
 const SERVICE_KEY = process.env.NEXT_PUBLIC_VITE_DATA_GO_KR_API_KEY;
 
 const api = axios.create({
@@ -27,17 +27,17 @@ export const fetchBuildingGeneral = async (
     const response = await api.get('/getBrRecapTitleInfo', {
       params: { sigunguCd, bjdongCd, bun: bun.padStart(4, '0'), ji: ji.padStart(4, '0') },
     });
-    
+
     const items = response.data?.response?.body?.items?.item;
     if (!items) return null;
-    
+
     const item = Array.isArray(items) ? items[0] : items;
-    
+
     // 필드 매핑 및 보정
     const totPkngCnt = item.totPkngCnt || (
-      Number(item.inMechPkngCnt || 0) + 
-      Number(item.outMechPkngCnt || 0) + 
-      Number(item.inAutoPkngCnt || 0) + 
+      Number(item.inMechPkngCnt || 0) +
+      Number(item.outMechPkngCnt || 0) +
+      Number(item.inAutoPkngCnt || 0) +
       Number(item.outAutoPkngCnt || 0)
     );
 
@@ -85,7 +85,7 @@ export const fetchBuildingTitle = async (
     const items = response.data?.response?.body?.items?.item;
     if (!items) return null;
     const item = Array.isArray(items) ? items[0] : items;
-    
+
     return {
       bldNm: item.bldNm,
       mainPurpsCdNm: item.mainPurpsCdNm,
@@ -115,9 +115,9 @@ export const fetchBuildingExposArea = async (
     });
     const items = response.data?.response?.body?.items?.item;
     if (!items) return [];
-    
+
     const itemList = Array.isArray(items) ? items : [items];
-    
+
     // 전유부만 필터링
     return itemList
       .filter((item: any) => item.exposPubuseGbCd === '1') // 1: 전유
@@ -157,7 +157,7 @@ export const fetchAllBuildingData = async (
   if (!summary && !title) throw new Error("건축물대장 정보를 찾을 수 없습니다.");
 
   const mergedSummary = { ...title, ...summary } as BuildingSummary;
-  
+
   return {
     summary: mergedSummary,
     rooms,

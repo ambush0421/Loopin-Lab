@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 
 const API_KEY = process.env.BUILDING_API_KEY;
-const BASE_SERVICE_URL = 'https://apis.data.go.kr/1613000/BldRgstHubService';
+const BASE_SERVICE_URL = 'http://apis.data.go.kr/1613000/BldRgstHubService';
 const FLOOR_ENDPOINT_PATHS = ['getBrFlrOulnInfo', 'getBrFlrOvrInfo'] as const;
 
 const PAGE_SIZE = 100;
