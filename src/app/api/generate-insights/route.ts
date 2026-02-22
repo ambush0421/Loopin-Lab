@@ -12,7 +12,9 @@ export async function POST(req: NextRequest) {
     try {
         const { type, data } = await req.json();
 
-        if (!openai.apiKey) {
+        // openai.apiKey 속성은 직접 읽을 수 없으므로(TypeScript Error), 환경 변수를 직접 검사합니다.
+        const apiKey = process.env.OPENAI_API_KEY || process.env.NEXT_PUBLIC_OPENAI_API_KEY;
+        if (!apiKey) {
             return NextResponse.json({ error: 'AI API 키가 설정되지 않았습니다.' }, { status: 500 });
         }
 

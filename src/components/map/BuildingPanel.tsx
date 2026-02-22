@@ -28,33 +28,16 @@ const BuildingPanel: React.FC<BuildingPanelProps> = ({ onGenerateQuote }) => {
 
     return (
         <div
-            className="h-full flex flex-col overflow-hidden"
-            style={{
-                width: 440,
-                background: '#111111',
-                borderLeft: '1px solid rgba(255,255,255,0.05)',
-                transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-                boxShadow: '-10px 0 30px rgba(0, 0, 0, 0.5)',
-            }}
+            className={`h-full flex flex-col overflow-hidden w-[440px] bg-zinc-950 border-l border-white/5 transition-transform duration-400 ease-[cubic-bezier(0.16,1,0.3,1)] shadow-[-10px_0_30px_rgba(0,0,0,0.5)]`}
         >
             {/* 패널 헤더 */}
             <div
-                className="flex items-start justify-between shrink-0"
-                style={{
-                    padding: '20px 24px',
-                    borderBottom: '1px solid #2A2A2A',
-                }}
+                className="flex items-start justify-between shrink-0 p-5 px-6 border-b border-zinc-800"
             >
                 <div className="flex flex-col gap-1 min-w-0">
                     {selectedBuilding && (
                         <span
-                            className="self-start text-[10px] font-medium"
-                            style={{
-                                background: 'rgba(201, 169, 98, 0.25)',
-                                border: '1px solid rgba(201, 169, 98, 0.37)',
-                                color: '#C9A962',
-                                padding: '3px 8px',
-                            }}
+                            className="self-start text-[10px] font-medium bg-[#C9A962]/25 border border-[#C9A962]/40 text-[#C9A962] px-2 py-0.5"
                         >
                             {buildingInfo?.mainPurpsCdNm || '건물'}
                         </span>
@@ -69,14 +52,11 @@ const BuildingPanel: React.FC<BuildingPanelProps> = ({ onGenerateQuote }) => {
                 </div>
                 <button
                     onClick={closePanel}
-                    className="shrink-0 flex items-center justify-center"
-                    style={{
-                        width: 32, height: 32,
-                        background: '#1A1A1A',
-                        border: '1px solid #2A2A2A',
-                    }}
+                    title="패널 닫기"
+                    aria-label="패널 닫기"
+                    className="shrink-0 flex items-center justify-center w-8 h-8 bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 transition-colors"
                 >
-                    <X className="w-3.5 h-3.5 text-[#848484]" />
+                    <X className="w-3.5 h-3.5 text-zinc-400" />
                 </button>
             </div>
 
@@ -107,8 +87,7 @@ const BuildingPanel: React.FC<BuildingPanelProps> = ({ onGenerateQuote }) => {
                 <div className="flex-1 overflow-y-auto">
                     {/* 건물 지표 카드 */}
                     <div
-                        className="grid grid-cols-3 shrink-0"
-                        style={{ borderBottom: '1px solid #2A2A2A' }}
+                        className="grid grid-cols-3 shrink-0 border-b border-zinc-800"
                     >
                         {[
                             { label: '연면적', value: `${formatNumber(Math.round(buildingInfo.totArea))}㎡` },
@@ -117,17 +96,11 @@ const BuildingPanel: React.FC<BuildingPanelProps> = ({ onGenerateQuote }) => {
                         ].map((item) => (
                             <div
                                 key={item.label}
-                                className="flex flex-col gap-1"
-                                style={{
-                                    padding: '16px 20px',
-                                    borderRight: '1px solid #2A2A2A',
-                                    background: '#0A0A0A',
-                                }}
+                                className="flex flex-col gap-1 px-5 py-4 border-r border-zinc-800 bg-zinc-950 last:border-r-0"
                             >
-                                <span className="text-[11px] text-[#848484]">{item.label}</span>
+                                <span className="text-[11px] text-zinc-400">{item.label}</span>
                                 <span
-                                    className="text-lg font-semibold"
-                                    style={{ color: item.highlight ? '#C9A962' : '#FFFFFF' }}
+                                    className={`text-lg font-semibold ${item.highlight ? 'text-[#C9A962]' : 'text-white'}`}
                                 >
                                     {item.value}
                                 </span>
@@ -138,11 +111,7 @@ const BuildingPanel: React.FC<BuildingPanelProps> = ({ onGenerateQuote }) => {
                     {/* 건물 사진 플레이스홀더 (프리미엄 느낌) */}
                     <div className="p-5">
                         <div
-                            className="w-full h-40 rounded-xl flex items-center justify-center overflow-hidden mb-2 relative"
-                            style={{
-                                background: 'linear-gradient(145deg, rgba(201,169,98,0.1) 0%, rgba(201,169,98,0.02) 100%)',
-                                border: '1px dashed rgba(201,169,98,0.3)',
-                            }}
+                            className="w-full h-40 rounded-xl flex items-center justify-center overflow-hidden mb-2 relative bg-gradient-to-br from-[#C9A962]/10 to-[#C9A962]/5 border border-dashed border-[#C9A962]/30"
                         >
                             <Building2 className="w-8 h-8 text-[#C9A962] opacity-50" />
                             <div className="absolute bottom-2 right-3 text-[10px] text-[#C9A962]/60 font-medium">실거래가 연동 준비 중</div>
@@ -153,19 +122,15 @@ const BuildingPanel: React.FC<BuildingPanelProps> = ({ onGenerateQuote }) => {
 
             {/* CTA 버튼 */}
             {!loading && buildingInfo && (
-                <div className="p-4 bg-[#0A0A0A] border-t border-white/5">
+                <div className="p-4 bg-zinc-950 border-t border-white/5 shrink-0 min-h-[80px]">
                     <button
                         onClick={onGenerateQuote}
-                        className="w-full flex items-center justify-center gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
-                        style={{
-                            background: 'linear-gradient(90deg, #D4AF37 0%, #C9A962 100%)',
-                            borderRadius: '8px',
-                            padding: '16px 0',
-                            boxShadow: '0 8px 20px rgba(201, 169, 98, 0.25)',
-                        }}
+                        title="호실 단위 상세 분석 및 견적 페이지 이동"
+                        aria-label="투자가치 상세 분석 시작"
+                        className="w-full flex items-center justify-center gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] bg-gradient-to-r from-[#D4AF37] to-[#C9A962] rounded-lg py-3.5 shadow-[0_8px_20px_rgba(201,169,98,0.25)]"
                     >
-                        <FileText className="w-5 h-5 text-[#111111]" />
-                        <span className="text-[16px] font-extrabold text-[#111111] tracking-wide">호실 단위 상세 분석 및 견적</span>
+                        <FileText className="w-5 h-5 text-zinc-950" />
+                        <span className="text-base font-extrabold text-zinc-950 tracking-wide">호실 단위 상세 분석 및 견적</span>
                     </button>
                 </div>
             )}

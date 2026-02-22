@@ -147,7 +147,7 @@ async function fetchBuildingLedger(sigunguCd: string, bjdongCd: string, bun: str
     return res.json();
 }
 
-export default function MapPage() {
+function ExploreMapContent() {
     const {
         panelOpen,
         selectedBuilding,
@@ -476,5 +476,18 @@ export default function MapPage() {
                 )}
             </div>
         </div>
+    );
+}
+
+export default function MapPage() {
+    return (
+        <React.Suspense fallback={
+            <div className="h-screen bg-zinc-950 flex flex-col items-center justify-center">
+                <div className="w-8 h-8 rounded-full border-2 border-[#C9A962] border-t-transparent animate-spin mb-4" />
+                <p className="text-[#848484] text-sm">탐색 모듈 로딩 중...</p>
+            </div>
+        }>
+            <ExploreMapContent />
+        </React.Suspense>
     );
 }

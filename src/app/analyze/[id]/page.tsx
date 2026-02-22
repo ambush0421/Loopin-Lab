@@ -151,6 +151,8 @@ export default function AnalyzePage({ params }: AnalyzePageProps) {
                 <div className="flex items-center gap-4">
                     <button
                         onClick={() => router.push('/explore')}
+                        title="탐색 페이지로 돌아가기"
+                        aria-label="뒤로 가기"
                         className="p-2 hover:bg-white/5 rounded-full transition-colors"
                     >
                         <ArrowLeft className="w-5 h-5 text-[#848484]" />
@@ -167,12 +169,18 @@ export default function AnalyzePage({ params }: AnalyzePageProps) {
                 </div>
 
                 <div className="flex items-center gap-3">
-                    <button className="flex items-center gap-2 px-4 py-2 bg-[#1A1A1A] hover:bg-[#2A2A2A] border border-white/10 rounded-lg text-sm font-medium transition-colors">
+                    <button
+                        title="수익률 계산기"
+                        aria-label="수익률 계산기"
+                        className="flex items-center gap-2 px-4 py-2 bg-[#1A1A1A] hover:bg-[#2A2A2A] border border-white/10 rounded-lg text-sm font-medium transition-colors"
+                    >
                         <Calculator className="w-4 h-4 text-[#848484]" />
                         <span>수익률 계산기</span>
                     </button>
                     <button
                         onClick={() => router.push('/report')}
+                        title="보고서 생성하기"
+                        aria-label="보고서 생성"
                         className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#D4AF37] to-[#C9A962] hover:opacity-90 rounded-lg text-sm font-bold text-[#111111] transition-opacity"
                     >
                         <FileText className="w-4 h-4" />
