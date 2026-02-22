@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Target, AlertTriangle, CheckCircle2, TrendingUp, Landmark, Sparkles, Loader2 } from 'lucide-react';
+import React from 'react';
+import { Target, AlertTriangle, CheckCircle2, TrendingUp, Landmark } from 'lucide-react';
 import { calculateInvestmentFeasibility, calculateProFormaCashflow } from '@/utils/financial';
 import { analyzeDealbreakers } from '@/utils/calculate';
 
@@ -9,8 +9,6 @@ interface ExecutiveSummaryProps {
 }
 
 export const ReportExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({ analyzedGroups, assumptions }) => {
-    const [aiSummary, setAiSummary] = useState<string | null>(null);
-    const [isGenerating, setIsGenerating] = useState(false);
     const enrichedGroups = analyzedGroups.map(group => {
         // 대표 건물 하나 추출 (보통 1호실 기준이거나 합산)
         const building = group.buildingData;
@@ -61,88 +59,30 @@ export const ReportExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({ analyz
         bestCandidate = [...enrichedGroups].sort((a, b) => b.proforma.equityROI - a.proforma.equityROI)[0];
     }
 
-    // AI 경영진 요약 생성 Effect
-    useEffect(() => {
-        if (!bestCandidate || aiSummary || isGenerating) return;
 
-        const generateSummary = async () => {
-            setIsGenerating(true);
-            try {
-                // 백엔드 시스템에 넘겨줄 핵심 데이터만 정제
-                const payload = {
-                    purchase_price: bestCandidate.params.purchasePrice,
-                    total_uses: bestCandidate.params.purchasePrice + bestCandidate.feasibility.totalIncidentalCosts,
-                    loan: bestCandidate.params.loanAmount,
-                    ltv: assumptions.loanLtvInvest,
-                    net_equity: bestCandidate.feasibility.netEquity,
-                    annual_noi: bestCandidate.proforma.annualNOI,
-                    cap_rate: bestCandidate.proforma.capRate,
-                    roi: bestCandidate.proforma.equityROI,
-                    dealbreakers: bestCandidate.dealbreakers
-                };
-
-                const res = await fetch('/api/generate-insights', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ type: 'executive_summary', data: payload })
-                });
-
-                if (res.ok) {
-                    const data = await res.json();
-                    setAiSummary(data.result);
-                } else {
-                    setAiSummary('AI 분석을 일시적으로 불러올 수 없습니다. 아래 정량 리포트를 참고해 주십시오.');
-                }
-            } catch (err) {
-                setAiSummary('AI 연동 오류가 발생했습니다.');
-            } finally {
-                setIsGenerating(false);
-            }
-        };
-
-        generateSummary();
-    }, [bestCandidate]);
 
     return (
         <div className="print-page w-[210mm] min-h-[297mm] p-[15mm] flex flex-col relative page-break-after bg-white">
             {/* Header */}
             <div className="border-b-[3px] border-slate-900 pb-4 mb-8">
                 <h2 className="text-sm font-black text-slate-500 tracking-widest uppercase mb-1">SECTION 1</h2>
-                <h1 className="text-3xl font-black text-slate-900 tracking-tight">AI 타당성 종합 검토 의견 (Executive Summary)</h1>
+                <h1 className="text-3xl font-black text-slate-900 tracking-tight">타당성 종합 검토 (Executive Summary)</h1>
             </div>
 
-            {/* AI 최우선 추천 (Strong Buy) & 3 Point 요약 */}
+            {/* 최우선 추천 (Strong Buy) */}
             {bestCandidate && (
                 <div className="mb-10 bg-slate-50 border border-slate-200 p-6 rounded-none relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-1 h-full bg-blue-600"></div>
                     <div className="flex items-center gap-3 mb-4">
-                        <Sparkles className="w-5 h-5 text-blue-600" />
-                        <h3 className="text-xl font-bold text-slate-900">AI 종합 투장의견 (AI Insights)</h3>
+                        <Target className="w-5 h-5 text-blue-600" />
+                        <h3 className="text-xl font-bold text-slate-900">종합 최우선 추천 대안 (Top Pick)</h3>
                     </div>
 
-                    <div className="mb-4">
-                        <span className="inline-block bg-blue-100 text-blue-800 text-xs font-bold px-2 py-1 uppercase tracking-wider mb-2">Top Pick</span>
+                    <div>
+                        <span className="inline-block bg-blue-100 text-blue-800 text-xs font-bold px-2 py-1 uppercase tracking-wider mb-2">Strong Buy</span>
                         <div className="text-2xl font-black text-slate-900">
                             Option {analyzedGroups.findIndex(g => g.groupId === bestCandidate.groupId) + 1} - {bestCandidate.buildingData?.bldNm || '건물명 없음'}
                         </div>
-                    </div>
-
-                    <div className="bg-white p-5 border border-slate-200 mt-4 min-h-[120px]">
-                        {isGenerating ? (
-                            <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-3 py-6">
-                                <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
-                                <span className="text-sm font-medium">최신 시장 데이터를 바탕으로 투자 인사이트를 생성 중입니다...</span>
-                            </div>
-                        ) : aiSummary ? (
-                            <div className="prose prose-sm max-w-none text-slate-700">
-                                {/* 마크다운 텍스트를 파싱하거나 줄바꿈 처리 */}
-                                {aiSummary.split('\n').map((line, i) => (
-                                    <p key={i} className="mb-2 leading-relaxed whitespace-pre-wrap text-justify">
-                                        {line.replace(/\*\*(.*?)\*\*/g, '$1')}
-                                    </p>
-                                ))}
-                            </div>
-                        ) : null}
                     </div>
                 </div>
             )}
