@@ -1,0 +1,53 @@
+name: Pages Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      deployments: write
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.13.1'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Next.js output for Cloudflare Pages
+        env:
+          NEXT_DISABLE_TURBOPACK: '1'
+          TURBOPACK: ''
+        run: npm run pages:build
+
+      - name: Verify build output
+        shell: bash
+        run: |
+          if [ ! -d ".vercel/output/static" ]; then
+            echo "Build output not found: .vercel/output/static"
+            exit 1
+          fi
+          echo "Build output found."
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          command: pages deploy .vercel/output/static --project-name building-report-pro --branch main

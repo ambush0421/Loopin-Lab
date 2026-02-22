@@ -25,6 +25,43 @@ export interface BuildingSummary {
 }
 
 /**
+ * 공공데이터포털 건축물대장 표제부 (Title) Raw API Type
+ */
+export interface BkitTitleRaw {
+  bldNm?: string;
+  platPlc?: string;
+  newPlatPlc?: string;
+  useAprDay?: string;
+  mainPurpsCdNm?: string;
+  etcPurps?: string;
+  strctCdNm?: string;
+  grndFlrCnt?: number | string;
+  ugrndFlrCnt?: number | string;
+  totArea?: number | string;
+  archArea?: number | string;
+  platArea?: number | string;
+  bcRat?: number | string;
+  vlRat?: number | string;
+  totPkngCnt?: number | string;
+  rideUseElvtCnt?: number | string;
+  emgenUseElvtCnt?: number | string;
+  hhldCnt?: number | string;
+  fmlyCnt?: number | string;
+}
+
+/**
+ * 공공데이터포털 건축물대장 전유부 (Exclusive Unit) Raw API Type
+ */
+export interface BkitUnitRaw {
+  dongNm?: string;     // 동명칭
+  hoNm?: string;       // 호명칭
+  flrNo?: number | string; // 층번호
+  flrNoNm?: string;    // 층명칭
+  area?: number | string;  // 전유면적
+  mainPurpsCdNm?: string; // 용도명
+}
+
+/**
  * 건물 나이 분석
  */
 export interface BuildingAge {

@@ -4,7 +4,10 @@ import { FileText, ArrowLeft } from 'lucide-react';
 
 export const metadata: Metadata = {
     title: '이용약관',
-    description: 'Building Report Pro 이용약관. 서비스 이용 조건, 이용자의 권리와 의무, 면책사항 등을 안내합니다.',
+    description:
+        'Building Report Pro 이용약관. 서비스 이용 조건, 이용자의 권리와 의무, 면책사항 등을 안내합니다.',
+    robots: { index: false, follow: false },
+    alternates: { canonical: 'https://building-report.pro/terms' },
 };
 
 export default function TermsPage() {
@@ -30,7 +33,7 @@ export default function TermsPage() {
                         </div>
                         <div>
                             <h1 className="text-3xl font-black text-zinc-900">이용약관</h1>
-                            <p className="text-zinc-500 mt-1">최종 수정일: 2024년 1월 1일</p>
+                            <p className="text-zinc-500 mt-1">최종 수정일: 2025년 2월 20일</p>
                         </div>
                     </div>
 
@@ -120,7 +123,7 @@ export default function TermsPage() {
 
                         <h2 className="text-xl font-bold text-zinc-900 mt-8 mb-4">부칙</h2>
                         <p className="text-zinc-600">
-                            본 약관은 2024년 1월 1일부터 시행합니다.
+                            본 약관은 2025년 2월 20일부터 시행합니다.
                         </p>
                     </div>
                 </div>

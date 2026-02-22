@@ -2,27 +2,52 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent } from '@/components/ui/card';
-import { Trophy, TrendingDown, TrendingUp, AlertTriangle, MapPin, Calendar, Car, Maximize, BarChart3 } from 'lucide-react';
+import { Trophy, TrendingDown, TrendingUp, MapPin, Calendar, Car, BarChart3 } from 'lucide-react';
 import ScoreBreakdownChart from "@/components/charts/ScoreBreakdownChart";
+import {
+  toSafeNumber,
+  formatManwon,
+  formatSignedBillionFromManwon
+} from '@/lib/utils/finance-format';
 
 interface MobileComparisonCardProps {
-  building: any;
+  building: MobileComparisonBuilding;
   index: number;
   isBest: boolean;
 }
 
-export function MobileComparisonCard({ building, index, isBest }: MobileComparisonCardProps) {
-  const formatCost = (cost: number) => {
-    if (cost >= 10000) return `${(cost / 10000).toFixed(1)}억`;
-    return `${cost.toLocaleString()}만`;
+type MobileComparisonBuilding = {
+  id: string;
+  name: string;
+  address: string;
+  analysis: {
+    monthlySaving?: number;
+    cumulativeEffect3Y?: number;
+    breakdown?: {
+      costScore: number;
+      areaScore: number;
+      parkingScore: number;
+      modernityScore: number;
+    };
   };
+  tags: {
+    riskLevel: 'SAFE' | 'CAUTION' | 'DANGER';
+  };
+  metrics: {
+    cost: number;
+    area: number;
+    year: number;
+    parking: number;
+    marketAvgPyung?: number;
+  };
+};
 
+export function MobileComparisonCard({ building, index, isBest }: MobileComparisonCardProps) {
   const toPyung = (m2: number) => (m2 * 0.3025).toFixed(1);
 
   return (
-    <Card className={`w-full border-none shadow-xl rounded-[2rem] overflow-hidden bg-white mb-4 ${
-      isBest ? 'ring-4 ring-blue-500/20' : ''
-    }`}>
+    <Card className={`w-full border-none shadow-xl rounded-[2rem] overflow-hidden bg-white mb-4 ${isBest ? 'ring-4 ring-blue-500/20' : ''
+      }`}>
       <CardContent className="p-0">
         {/* 상단 헤더 섹션 */}
         <div className={`p-6 ${isBest ? 'bg-blue-600 text-white' : 'bg-slate-900 text-white'}`}>
@@ -35,10 +60,10 @@ export function MobileComparisonCard({ building, index, isBest }: MobileComparis
               </div>
             )}
           </div>
-          <h3 className="text-xl font-bold mb-2 line-clamp-1">{building.name}</h3>
-          <div className="flex items-center gap-1.5 text-white/60 text-xs">
-            <MapPin className="w-3 h-3" />
-            <span className="truncate">{building.address}</span>
+          <h3 className="text-xl font-bold mb-2 line-clamp-1 break-words">{building.name}</h3>
+          <div className="flex items-start gap-1.5 text-white/60 text-xs">
+            <MapPin className="w-3 h-3 flex-shrink-0 mt-0.5" />
+            <span className="line-clamp-2 break-words leading-snug">{building.address}</span>
           </div>
         </div>
 
@@ -47,15 +72,16 @@ export function MobileComparisonCard({ building, index, isBest }: MobileComparis
           <div className="bg-slate-50 p-4 rounded-2xl">
             <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">월 고정비</p>
             <div className="flex items-baseline gap-1">
-              <span className="text-lg font-black text-slate-900">{formatCost(building.metrics.cost)}</span>
-              {building.analysis.monthlySaving > 0 && <TrendingDown className="w-3 h-3 text-blue-500" />}
+              <span className="text-lg font-black text-slate-900">{formatManwon(building.metrics.cost)}</span>
+              {toSafeNumber(building.analysis.monthlySaving) > 0 && <TrendingDown className="w-3 h-3 text-blue-500" />}
+              {toSafeNumber(building.analysis.monthlySaving) < 0 && <TrendingUp className="w-3 h-3 text-amber-500" />}
             </div>
           </div>
           <div className="bg-slate-50 p-4 rounded-2xl">
             <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">전용 면적</p>
             <div className="flex items-baseline gap-1">
-              <span className="text-lg font-black text-slate-900">{toPyung(building.metrics.area)}평</span>
-              <span className="text-[10px] text-slate-400">({building.metrics.area.toFixed(0)}㎡)</span>
+              <span className="text-lg font-black text-slate-900">{toPyung(toSafeNumber(building.metrics.area))}평</span>
+              <span className="text-[10px] text-slate-400">({toSafeNumber(building.metrics.area).toFixed(0)}㎡)</span>
             </div>
           </div>
         </div>
@@ -78,12 +104,11 @@ export function MobileComparisonCard({ building, index, isBest }: MobileComparis
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase">인근 시세 평균</p>
-                <p className="text-sm font-bold text-slate-700">{building.metrics.marketAvgPyung?.toLocaleString() || '-'}만/평</p>
+                <p className="text-sm font-bold text-slate-700">{formatManwon(building.metrics.marketAvgPyung || 0)}/평</p>
               </div>
             </div>
-            <div className={`px-3 py-1 rounded-full text-[10px] font-black ${
-              building.tags.riskLevel === 'SAFE' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
-            }`}>
+            <div className={`px-2 py-1 rounded-full text-[10px] font-black whitespace-nowrap align-self-start shrink-0 ${building.tags.riskLevel === 'SAFE' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+              }`}>
               {building.tags.riskLevel === 'SAFE' ? '정상건물' : '주의필요'}
             </div>
           </div>
@@ -93,14 +118,14 @@ export function MobileComparisonCard({ building, index, isBest }: MobileComparis
               <Calendar className="w-4 h-4 text-slate-400" />
               <div>
                 <p className="text-[9px] font-bold text-slate-400 uppercase">준공연도</p>
-                <p className="text-xs font-bold text-slate-700">{building.metrics.year}년</p>
+                <p className="text-xs font-bold text-slate-700">{toSafeNumber(building.metrics.year)}년</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
               <Car className="w-4 h-4 text-slate-400" />
               <div>
                 <p className="text-[9px] font-bold text-slate-400 uppercase">주차대수</p>
-                <p className="text-xs font-bold text-slate-700">{building.metrics.parking}대</p>
+                <p className="text-xs font-bold text-slate-700">{toSafeNumber(building.metrics.parking)}대</p>
               </div>
             </div>
           </div>
@@ -111,7 +136,7 @@ export function MobileComparisonCard({ building, index, isBest }: MobileComparis
           <div>
             <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">3년 누적 실질 이익</p>
             <p className={`text-xl font-black ${isBest ? 'text-blue-600' : 'text-slate-700'}`}>
-              +{Math.round(building.analysis.cumulativeEffect3Y / 10000)}억원
+              {formatSignedBillionFromManwon(building.analysis.cumulativeEffect3Y)}
             </p>
           </div>
           <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isBest ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-400'}`}>

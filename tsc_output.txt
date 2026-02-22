@@ -1,0 +1,12 @@
+src/components/dashboard/ComparePageClient.tsx(406,21): error TS2322: Type 'CompareResponse' is not assignable to type 'ComparisonData'.
+  Types of property 'buildings' are incompatible.
+    Type 'ComparisonBuilding[]' is not assignable to type 'ComparisonTableBuilding[]'.
+      Type 'ComparisonBuilding' is not assignable to type 'ComparisonTableBuilding'.
+        Types of property 'analysis' are incompatible.
+          Property 'breakdown' is missing in type '{ score: number; monthlySaving?: number | undefined; cumulativeEffect3Y?: number | undefined; }' but required in type '{ monthlySaving: number; cumulativeEffect3Y: number; breakdown: unknown; score?: number | undefined; }'.
+src/components/dashboard/ComparePageClient.tsx(436,21): error TS2322: Type 'ComparisonBuilding' is not assignable to type 'MobileComparisonBuilding'.
+  Types of property 'analysis' are incompatible.
+    Property 'breakdown' is missing in type '{ score: number; monthlySaving?: number | undefined; cumulativeEffect3Y?: number | undefined; }' but required in type '{ monthlySaving: number; cumulativeEffect3Y: number; breakdown: unknown; }'.
+src/components/dashboard/ComparisonTable.tsx(171,41): error TS2322: Type 'unknown' is not assignable to type '{ costScore: number; areaScore: number; parkingScore: number; modernityScore: number; }'.
+src/components/dashboard/InvestmentMap.tsx(63,30): error TS18046: 'sdk.Loader' is of type 'unknown'.
+src/components/dashboard/MobileComparisonCard.tsx(91,32): error TS2322: Type 'unknown' is not assignable to type '{ costScore: number; areaScore: number; parkingScore: number; modernityScore: number; }'.

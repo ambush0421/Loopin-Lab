@@ -55,13 +55,9 @@ const ReportPage: React.FC = () => {
 
               <BuildingInfoCard />
               
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div className="space-y-8">
-                  <KakaoMap />
-                </div>
-                <div className="space-y-8">
-                  <NearbyTransactions />
-                </div>
+              <div className="space-y-8">
+                <KakaoMap />
+                <NearbyTransactions />
               </div>
 
               <RoomSelector />

@@ -1,13 +1,56 @@
 'use client';
 
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Check, Trophy, AlertTriangle, Info, TrendingUp, TrendingDown, Clock, MapPin, BarChart3 } from "lucide-react";
+import { Trophy, Info, MapPin } from "lucide-react";
 import ScoreBreakdownChart from "@/components/charts/ScoreBreakdownChart";
+import {
+  formatManwon,
+  formatSignedDelta,
+  formatSignedManwon,
+  toSafeNumber
+} from '@/lib/utils/finance-format';
 
 interface ComparisonTableProps {
-  data: any;
+  data: ComparisonData;
   onViewDetail: (id: string) => void;
 }
+
+type ComparisonTableBuilding = {
+  id: string;
+  name: string;
+  address: string;
+  analysis: {
+    monthlySaving?: number;
+    cumulativeEffect3Y?: number;
+    breakdown?: {
+      costScore: number;
+      areaScore: number;
+      parkingScore: number;
+      modernityScore: number;
+    };
+    score?: number;
+  };
+  tags: {
+    riskLevel: 'SAFE' | 'CAUTION' | 'DANGER';
+  };
+  metrics: {
+    cost: number;
+    area: number;
+    year: number;
+    parking: number;
+  };
+};
+
+type ComparisonData = {
+  buildings: ComparisonTableBuilding[];
+  recommendation: {
+    bestBuildingIndex: number;
+    reason: string;
+    totalScore: number;
+  };
+  meta: {
+    type: 'LEASE' | 'PURCHASE' | 'INVEST';
+  } & Record<string, unknown>;
+};
 
 export function ComparisonTable({ data, onViewDetail }: ComparisonTableProps) {
   if (!data || !data.buildings) return null;
@@ -15,11 +58,6 @@ export function ComparisonTable({ data, onViewDetail }: ComparisonTableProps) {
   const { buildings, recommendation, meta } = data;
   const bestIdx = recommendation.bestBuildingIndex;
   const type = meta.type || 'LEASE';
-
-  const formatCost = (cost: number) => {
-    if (cost >= 10000) return `${(cost / 10000).toFixed(1)}억`;
-    return `${cost.toLocaleString()}만`;
-  };
 
   const toPyung = (m2: number) => (m2 * 0.3025).toFixed(1);
 
@@ -76,12 +114,11 @@ export function ComparisonTable({ data, onViewDetail }: ComparisonTableProps) {
           </div>
 
           {/* 물건 데이터 열 */}
-          {buildings.map((b: any, idx: number) => (
-            <div 
-              key={b.id} 
-              className={`col-span-3 border-r-2 border-black last:border-r-0 transition-all ${
-                idx === bestIdx ? 'bg-white z-10 shadow-[0_0_40px_rgba(0,0,0,0.1)]' : 'opacity-80'
-              }`}
+          {buildings.map((b, idx: number) => (
+            <div
+              key={b.id}
+              className={`col-span-3 border-r-2 border-black last:border-r-0 transition-all ${idx === bestIdx ? 'bg-white z-10 shadow-[0_0_40px_rgba(0,0,0,0.1)]' : 'opacity-80'
+                }`}
             >
               <div className="h-40 border-b-2 border-black p-6 flex flex-col justify-between">
                 <div>
@@ -101,14 +138,13 @@ export function ComparisonTable({ data, onViewDetail }: ComparisonTableProps) {
 
               <div className="divide-y-2 divide-gray-100">
                 <div className="h-16 flex items-center px-6 font-black text-black text-lg tracking-tighter">
-                  {formatCost(b.metrics.cost)}
+                  {formatManwon(toSafeNumber(b.metrics.cost))}
                 </div>
 
                 <div className={`h-16 flex items-center px-6 ${idx === bestIdx ? 'bg-gray-50' : ''}`}>
                   <div className="flex flex-col">
-                    <span className={`text-base font-black ${b.analysis.monthlySaving >= 0 ? 'text-black' : 'text-gray-400'}`}>
-                      {b.analysis.monthlySaving >= 0 ? '▼ ' : '▲ '}
-                      {Math.abs(b.analysis.monthlySaving).toLocaleString()}
+                    <span className={`text-base font-black ${toSafeNumber(b.analysis.monthlySaving) >= 0 ? 'text-black' : 'text-gray-400'}`}>
+                      {formatSignedDelta(toSafeNumber(b.analysis.monthlySaving))}
                     </span>
                     <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">Value Delta</span>
                   </div>
@@ -116,17 +152,17 @@ export function ComparisonTable({ data, onViewDetail }: ComparisonTableProps) {
 
                 <div className="h-16 flex items-center px-6">
                   <div className="flex flex-col">
-                    <span className="text-base font-black text-black">{toPyung(b.metrics.area)}</span>
-                    <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">{b.metrics.area.toFixed(1)} m²</span>
+                    <span className="text-base font-black text-black">{toPyung(toSafeNumber(b.metrics.area))}</span>
+                    <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">{toSafeNumber(b.metrics.area).toFixed(1)} m²</span>
                   </div>
                 </div>
 
                 <div className="h-16 flex items-center px-6 text-sm font-black text-black italic">
-                  {b.metrics.year} <span className="text-[10px] text-gray-400 ml-1">({new Date().getFullYear() - b.metrics.year}Y)</span>
+                  {toSafeNumber(b.metrics.year)} <span className="text-[10px] text-gray-400 ml-1">({new Date().getFullYear() - toSafeNumber(b.metrics.year)}Y)</span>
                 </div>
 
                 <div className="h-16 flex items-center px-6 text-sm font-black text-black uppercase">
-                  {b.metrics.parking} UNITS
+                  {toSafeNumber(b.metrics.parking)} UNITS
                 </div>
 
                 <div className="h-16 flex items-center px-6 text-xs font-black">
@@ -136,14 +172,13 @@ export function ComparisonTable({ data, onViewDetail }: ComparisonTableProps) {
                 </div>
 
                 <div className="h-32 p-4 bg-gray-50/50 flex items-center">
-                   <ScoreBreakdownChart breakdown={b.analysis.breakdown} />
+                  <ScoreBreakdownChart breakdown={b.analysis.breakdown} />
                 </div>
 
                 <div className={`h-24 flex items-center px-6 ${idx === bestIdx ? 'bg-black text-white' : 'bg-gray-100'}`}>
                   <div className="flex flex-col">
                     <span className={`text-xl font-black ${idx === bestIdx ? 'text-white' : 'text-black'} tracking-tighter`}>
-                      {b.analysis.cumulativeEffect3Y >= 0 ? '+' : ''}
-                      {formatCost(b.analysis.cumulativeEffect3Y)}
+                      {formatSignedManwon(b.analysis.cumulativeEffect3Y)}
                     </span>
                     <span className={`text-[9px] font-black ${idx === bestIdx ? 'text-gray-400' : 'text-gray-400'} uppercase tracking-widest`}>
                       3Y Projected Gain
@@ -152,13 +187,12 @@ export function ComparisonTable({ data, onViewDetail }: ComparisonTableProps) {
                 </div>
 
                 <div className="h-24 flex items-center px-6">
-                  <button 
+                  <button
                     onClick={() => onViewDetail(b.id)}
-                    className={`w-full py-3 rounded-none text-[10px] font-black uppercase tracking-[0.2em] transition-all border-2 border-black ${
-                      idx === bestIdx 
-                      ? 'bg-black text-white hover:bg-white hover:text-black' 
+                    className={`w-full py-3 rounded-none text-[10px] font-black uppercase tracking-[0.2em] transition-all border-2 border-black ${idx === bestIdx
+                      ? 'bg-black text-white hover:bg-white hover:text-black'
                       : 'bg-white text-black hover:bg-black hover:text-white'
-                    }`}
+                      }`}
                   >
                     View Analysis
                   </button>

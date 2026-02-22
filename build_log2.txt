@@ -1,0 +1,28 @@
+
+> tmp-next@0.1.0 build
+> node ./scripts/build.mjs
+
+??Next.js 16.1.6 (webpack)
+- Environments: .env.local
+
+  Creating an optimized production build ...
+??Compiled successfully in 11.8s
+  Running TypeScript ...
+Failed to compile.
+
+./src/components/dashboard/ComparePageClient.tsx:406:21
+Type error: Type 'CompareResponse' is not assignable to type 'ComparisonData'.
+  Types of property 'buildings' are incompatible.
+    Type 'ComparisonBuilding[]' is not assignable to type 'ComparisonTableBuilding[]'.
+      Type 'ComparisonBuilding' is not assignable to type 'ComparisonTableBuilding'.
+        Types of property 'analysis' are incompatible.
+          Property 'breakdown' is missing in type '{ score: number; monthlySaving?: number | undefined; cumulativeEffect3Y?: number | undefined; }' but required in type '{ monthlySaving: number; cumulativeEffect3Y: number; breakdown: unknown; score?: number | undefined; }'.
+
+  404 |                 <div className="hidden lg:block">
+  405 |                   <ComparisonTable 
+> 406 |                     data={comparisonData} 
+      |                     ^
+  407 |                     onViewDetail={(id) => router.push(`/report/${id}`)} 
+  408 |                   />
+  409 |                 </div>
+Next.js build worker exited with code: 1 and signal: null

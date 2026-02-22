@@ -28,10 +28,10 @@ const AddressSearch: React.FC = () => {
   }, []);
 
   const handleSearch = () => {
-    if (!scriptLoaded || !window.daum?.Postcode) return;
+    if (!scriptLoaded || !(window as any).daum?.Postcode) return;
 
-    new window.daum.Postcode({
-      oncomplete: async (data) => {
+    new (window as any).daum.Postcode({
+      oncomplete: async (data: any) => {
         const { roadAddress, jibunAddress, bcode, buildingCode } = data;
 
         try {

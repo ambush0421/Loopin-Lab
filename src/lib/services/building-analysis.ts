@@ -33,12 +33,17 @@ export class BuildingAnalysisService {
 
     const analyzedBuildings = buildings.map((b) => {
       const age = currentYear - b.metrics.year;
+      const costBaseline = Number(currentCostBaseline) || 0;
+      const monthlyCost = Number(b?.metrics?.cost) || 0;
+      const rawMonthlySaving = costBaseline - monthlyCost;
+      const monthlySaving = Number.isFinite(rawMonthlySaving) ? rawMonthlySaving : 0;
+      const cumulativeEffect3Y = Number.isFinite(monthlySaving) ? monthlySaving * 36 : 0;
 
       // 2. 항목별 스코어 산출
-      const costDelta = currentCostBaseline - b.metrics.cost;
+      const costDelta = costBaseline - monthlyCost;
       const cScore = (costDelta / 100) * 100 * (weights.costScore || 0.35);
-      const aScore = (b.metrics.area / 100) * 100 * (weights.areaScore || 0.35);
-      const pScore = Math.min(b.metrics.parking / 10, 1) * 100 * (weights.parkingScore || 0.15);
+      const aScore = ((b.metrics.area || 0) / 100) * 100 * (weights.areaScore || 0.35);
+      const pScore = Math.min((b.metrics.parking || 0) / 10, 1) * 100 * (weights.parkingScore || 0.15);
       const mScore = Math.max(0, (30 - age) / 30) * 100 * (weights.modernityScore || 0.15);
 
       let totalScore = cScore + aScore + pScore + mScore;
@@ -75,6 +80,8 @@ export class BuildingAnalysisService {
         analysis: {
           score: totalScore,
           breakdown: { costScore: cScore, areaScore: aScore, parkingScore: pScore, modernityScore: mScore },
+          monthlySaving,
+          cumulativeEffect3Y,
           financialSimulation: simulation
         }
       };

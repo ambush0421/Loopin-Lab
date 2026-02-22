@@ -4,7 +4,10 @@ import { Shield, ArrowLeft } from 'lucide-react';
 
 export const metadata: Metadata = {
     title: '개인정보처리방침',
-    description: 'Building Report Pro 개인정보처리방침. 수집하는 개인정보 항목, 이용 목적, 보관 기간 및 파기 절차에 대해 안내합니다.',
+    description:
+        'Building Report Pro 개인정보처리방침. 수집하는 개인정보 항목, 이용 목적, 보관 기간 및 파기 절차에 대해 안내합니다.',
+    robots: { index: false, follow: false },
+    alternates: { canonical: 'https://building-report.pro/privacy' },
 };
 
 export default function PrivacyPage() {
@@ -30,7 +33,7 @@ export default function PrivacyPage() {
                         </div>
                         <div>
                             <h1 className="text-3xl font-black text-zinc-900">개인정보처리방침</h1>
-                            <p className="text-zinc-500 mt-1">최종 수정일: 2024년 1월 1일</p>
+                            <p className="text-zinc-500 mt-1">최종 수정일: 2025년 2월 20일</p>
                         </div>
                     </div>
 
@@ -102,9 +105,8 @@ export default function PrivacyPage() {
 
                         <h2 className="text-xl font-bold text-zinc-900 mt-8 mb-4">8. 개인정보 보호책임자</h2>
                         <div className="bg-zinc-50 p-6 rounded-xl text-zinc-600">
-                            <p><strong>개인정보 보호책임자:</strong> 홍길동</p>
+                            <p><strong>개인정보 보호책임자:</strong> 서비스 운영팀</p>
                             <p><strong>이메일:</strong> privacy@building-report.pro</p>
-                            <p><strong>전화:</strong> 02-0000-0000</p>
                         </div>
 
                         <h2 className="text-xl font-bold text-zinc-900 mt-8 mb-4">9. 개인정보처리방침의 변경</h2>

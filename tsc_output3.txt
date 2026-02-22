@@ -1,0 +1,11 @@
+src/components/dashboard/ComparePageClient.tsx(406,21): error TS2322: Type 'CompareResponse' is not assignable to type 'ComparisonData'.
+  Types of property 'buildings' are incompatible.
+    Type 'ComparisonBuilding[]' is not assignable to type 'ComparisonTableBuilding[]'.
+      Type 'ComparisonBuilding' is not assignable to type 'ComparisonTableBuilding'.
+        The types of 'analysis.breakdown' are incompatible between these types.
+          Type '{ costScore: number; areaScore: number; parkingScore: number; modernityScore: number; } | undefined' is not assignable to type '{ costScore: number; areaScore: number; parkingScore: number; modernityScore: number; }'.
+            Type 'undefined' is not assignable to type '{ costScore: number; areaScore: number; parkingScore: number; modernityScore: number; }'.
+src/components/dashboard/ComparePageClient.tsx(436,21): error TS2322: Type 'ComparisonBuilding' is not assignable to type 'MobileComparisonBuilding'.
+  The types of 'analysis.breakdown' are incompatible between these types.
+    Type '{ costScore: number; areaScore: number; parkingScore: number; modernityScore: number; } | undefined' is not assignable to type '{ costScore: number; areaScore: number; parkingScore: number; modernityScore: number; }'.
+      Type 'undefined' is not assignable to type '{ costScore: number; areaScore: number; parkingScore: number; modernityScore: number; }'.

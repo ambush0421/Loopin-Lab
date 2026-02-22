@@ -1,6 +1,6 @@
 'use client';
 
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { useState, useEffect } from "react";
 import dynamic from 'next/dynamic';
 
@@ -16,24 +16,64 @@ interface InvestmentMapProps {
   transactions?: any[];
 }
 
-export function InvestmentMap({ address, coords, transactions }: InvestmentMapProps) {
-  const [mapType, setMapType] = useState<'loading' | 'kakao' | 'osm'>('loading');
+function isPlaceholderKakaoKey(rawKey: string): boolean {
+  const key = rawKey.trim().toLowerCase();
+  if (!key) return true;
+  if (key === "your_key_here") return true;
+  if (key === "your_kakao_javascript_key") return true;
+  if (key === "your_javascript_key_here") return true;
+  if (key.startsWith("your_")) return true;
+  if (key.includes("placeholder")) return true;
+  if (key.includes("발급")) return true;
+  return false;
+}
+
+function canUseKakaoMap(rawKey: string): boolean {
+  const key = rawKey.trim();
+  if (isPlaceholderKakaoKey(key)) return false;
+  // Kakao JavaScript 키는 일반적으로 20자 이상 영숫자 문자열입니다.
+  return key.length >= 20;
+}
+
+export function InvestmentMap({ address, coords, transactions: _transactions }: InvestmentMapProps) {
+  const [mapType, setMapType] = useState<'loading' | 'kakao' | 'osm' | 'error'>('loading');
   const [KakaoMap, setKakaoMap] = useState<any>(null);
+  const [kakaoMapReady, setKakaoMapReady] = useState(false);
+  const [kakaoLoadError, setKakaoLoadError] = useState<string | null>(null);
+  const [resolvedCoords, setResolvedCoords] = useState<{ lat: number; lng: number } | undefined>(coords);
+  const [viewMode, setViewMode] = useState<'map' | 'roadview'>('map');
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [roadviewFailed, setRoadviewFailed] = useState(false);
+  const [mapSkin, setMapSkin] = useState<'ROADMAP' | 'SKYVIEW'>('ROADMAP');
 
   useEffect(() => {
     // 카카오맵 키 확인
-    const kakaoKey = process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
+    const kakaoKey = String(process.env.NEXT_PUBLIC_KAKAO_MAP_KEY ?? '');
 
-    if (kakaoKey && kakaoKey !== "YOUR_KEY_HERE" && kakaoKey.length > 10) {
+    if (canUseKakaoMap(kakaoKey)) {
       // 카카오맵 SDK 로드 시도
       const loadKakaoMap = async () => {
         try {
+          setKakaoLoadError(null);
           const sdk = await import('react-kakao-maps-sdk');
+          if (!sdk || !('Map' in sdk) || !('Loader' in sdk)) {
+            throw new Error('KAKAO_SDK_INVALID');
+          }
+          // 공식 문서 기준: JavaScript 키로 SDK를 명시 로딩해야 도메인 검증과 초기화가 정상 동작합니다.
+          const sdkAny = sdk as any;
+          const loader = new sdkAny.Loader({
+            appkey: kakaoKey,
+            libraries: ['services', 'clusterer'],
+          });
+          await loader.load();
           setKakaoMap(sdk);
           setMapType('kakao');
+          setKakaoMapReady(false);
         } catch (e) {
-          console.warn('카카오맵 로드 실패, OpenStreetMap 사용');
-          setMapType('osm');
+          const message = e instanceof Error ? e.message : 'KAKAO_SDK_LOAD_FAILED';
+          console.warn('카카오맵 로드 실패(키/도메인/SDK)', e);
+          setKakaoLoadError(message);
+          setMapType('error');
         }
       };
       loadKakaoMap();
@@ -43,12 +83,49 @@ export function InvestmentMap({ address, coords, transactions }: InvestmentMapPr
     }
   }, []);
 
-  // 가상의 주변 실거래 사례 생성
-  const displayMarkers = transactions && transactions.length > 0 ? transactions : (coords ? [
-    { lat: coords.lat + 0.001, lng: coords.lng + 0.001, price: "5,200", date: "24.05" },
-    { lat: coords.lat - 0.0015, lng: coords.lng + 0.0005, price: "4,800", date: "24.02" },
-    { lat: coords.lat + 0.0008, lng: coords.lng - 0.0012, price: "6,100", date: "23.11" },
-  ] : []);
+  useEffect(() => {
+    if (mapType !== 'kakao') return;
+    const timeout = setTimeout(() => {
+      if (!kakaoMapReady) {
+        console.warn('카카오맵 초기화 실패');
+        setKakaoLoadError('KAKAO_MAP_INIT_TIMEOUT');
+        setMapType('error');
+      }
+    }, 4000);
+    return () => clearTimeout(timeout);
+  }, [mapType, kakaoMapReady]);
+
+  useEffect(() => {
+    setResolvedCoords(coords);
+  }, [coords?.lat, coords?.lng]);
+
+  useEffect(() => {
+    if (coords) return;
+    if (mapType !== 'kakao' || !KakaoMap || !address?.trim()) return;
+    if (typeof window === 'undefined') return;
+
+    const globalKakao = (window as Window & { kakao?: any }).kakao;
+    const geocoderCtor = globalKakao?.maps?.services?.Geocoder;
+    const statusEnum = globalKakao?.maps?.services?.Status;
+    if (!geocoderCtor || !statusEnum) return;
+
+    const geocoder = new geocoderCtor();
+    geocoder.addressSearch(address, (result: Array<{ x: string; y: string }> | null, status: string) => {
+      if (status !== statusEnum.OK || !result?.length) return;
+      const first = result[0];
+      const lat = Number(first.y);
+      const lng = Number(first.x);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        setResolvedCoords({ lat, lng });
+      }
+    });
+  }, [address, coords, mapType, KakaoMap]);
+
+  const pinCoords = resolvedCoords || coords;
+
+  useEffect(() => {
+    setRoadviewFailed(false);
+  }, [pinCoords?.lat, pinCoords?.lng, address]);
 
   // 로딩 중
   if (mapType === 'loading') {
@@ -67,52 +144,182 @@ export function InvestmentMap({ address, coords, transactions }: InvestmentMapPr
     return (
       <OpenStreetMap
         address={address}
-        coords={coords}
-        transactions={displayMarkers}
+        coords={pinCoords}
+        transactions={[]}
       />
+    );
+  }
+
+  if (mapType === 'error') {
+    const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+    return (
+      <Card className="h-full bg-slate-50 flex items-center justify-center border-2 border-dashed border-amber-200 rounded-3xl">
+        <div className="text-center p-6 max-w-[560px]">
+          <p className="text-slate-700 font-bold mb-2">카카오 지도 로딩에 실패했습니다</p>
+          <p className="text-xs text-slate-500 mb-3 break-words">
+            current origin: {currentOrigin || '-'}
+          </p>
+          <p className="text-xs text-slate-500 mb-4 break-words">
+            error: {kakaoLoadError || 'unknown'}
+          </p>
+          <p className="text-xs text-slate-500">
+            카카오 개발자 콘솔에서 JavaScript 키, Web 플랫폼 도메인, 지도 API 활성화를 확인하세요.
+          </p>
+          <button
+            type="button"
+            onClick={() => setMapType('osm')}
+            className="mt-4 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100"
+          >
+            OpenStreetMap으로 계속 보기
+          </button>
+        </div>
+      </Card>
     );
   }
 
   // 카카오맵 사용
   if (mapType === 'kakao' && KakaoMap) {
-    const { Map, MapMarker, CustomOverlayMap } = KakaoMap;
+    const { Map, MapMarker, Roadview, RoadviewMarker } = KakaoMap;
     const defaultCenter = { lat: 37.566826, lng: 126.9786567 };
+    const mapCenter = pinCoords || defaultCenter;
+    const mapTypeId: 'ROADMAP' | 'HYBRID' = mapSkin === 'SKYVIEW' ? 'HYBRID' : 'ROADMAP';
 
     return (
-      <Card className="h-full overflow-hidden flex flex-col border-none shadow-lg rounded-3xl">
+      <Card className={`${isExpanded ? 'fixed inset-4 z-[70]' : 'h-full'} overflow-hidden flex flex-col border-none shadow-lg rounded-3xl`}>
         <CardHeader className="p-4 pb-2 border-b bg-slate-50">
-          <CardTitle className="text-sm font-bold text-slate-600 flex justify-between items-center">
-            <span>📍 위치 및 주변 실거래 사례</span>
-            <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">반경 500m 분석</span>
+          <CardTitle className="text-sm font-bold text-slate-600 flex items-center justify-between gap-2">
+            <span>📍 건물 위치</span>
+            <div className="flex items-center gap-2">
+              {viewMode === 'roadview' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setViewMode('map');
+                    setRoadviewFailed(false);
+                  }}
+                  className="text-[10px] px-2 py-0.5 rounded-full border bg-white text-slate-700 border-slate-200"
+                  title="지도로 돌아가기"
+                >
+                  지도복귀
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setIsExpanded((prev) => !prev)}
+                className={`text-[10px] px-2 py-0.5 rounded-full border ${isExpanded
+                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                    : 'bg-white text-slate-700 border-slate-200'
+                  }`}
+                title={isExpanded ? '기본 크기' : '전체 지도'}
+              >
+                {isExpanded ? '기본크기' : '전체지도'}
+              </button>
+            </div>
           </CardTitle>
         </CardHeader>
         <div className="flex-1 min-h-[300px] relative">
-          <Map
-            center={coords || defaultCenter}
-            style={{ width: "100%", height: "100%" }}
-            level={3}
-          >
-            {/* 대상지 마커 (메인) */}
-            {coords && (
-              <MapMarker
-                position={coords}
-                image={{
-                  src: "https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/markerStar.png",
-                  size: { width: 24, height: 35 }
+          {viewMode === 'roadview' ? (
+            pinCoords ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setViewMode('map');
+                    setRoadviewFailed(false);
+                  }}
+                  className="absolute left-3 top-3 z-20 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+                  title="지도로 돌아가기"
+                >
+                  지도
+                </button>
+                <Roadview
+                  position={{ lat: mapCenter.lat, lng: mapCenter.lng, radius: 80 }}
+                  style={{ width: '100%', height: '100%' }}
+                  onCreate={() => setKakaoMapReady(true)}
+                  onErrorGetNearestPanoId={() => setRoadviewFailed(true)}
+                  onInit={() => setRoadviewFailed(false)}
+                >
+                  <RoadviewMarker position={pinCoords} />
+                </Roadview>
+                {roadviewFailed && (
+                  <div className="absolute inset-0 bg-slate-900/60 text-white flex items-center justify-center text-sm font-semibold">
+                    로드뷰를 찾을 수 없습니다. 주변 위치로 지도를 확인하세요.
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="h-full w-full bg-slate-100 text-slate-500 text-sm flex items-center justify-center">
+                좌표가 없어 로드뷰를 표시할 수 없습니다.
+              </div>
+            )
+          ) : (
+            <>
+              <div className="absolute left-3 top-3 z-20 flex overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => setMapSkin('ROADMAP')}
+                  className={`px-4 py-2 text-sm font-semibold transition-colors ${mapSkin === 'ROADMAP'
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-white text-slate-700 hover:bg-slate-50'
+                    }`}
+                >
+                  지도
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMapSkin('SKYVIEW')}
+                  className={`px-4 py-2 text-sm font-semibold transition-colors ${mapSkin === 'SKYVIEW'
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-white text-slate-700 hover:bg-slate-50'
+                    }`}
+                >
+                  스카이뷰
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setViewMode('roadview');
+                  setRoadviewFailed(false);
                 }}
-              />
-            )}
-
-            {/* 주변 실거래 마커들 */}
-            {displayMarkers.map((marker, index) => (
-              <CustomOverlayMap key={index} position={{ lat: Number(marker.lat), lng: Number(marker.lng) }}>
-                <div className="bg-white border-2 border-blue-600 px-2 py-1 rounded-lg shadow-lg">
-                  <p className="text-[10px] font-black text-blue-600 leading-none">{marker.price}</p>
-                  <p className="text-[8px] text-gray-400 text-center">{marker.date}</p>
-                </div>
-              </CustomOverlayMap>
-            ))}
-          </Map>
+                disabled={!pinCoords}
+                className="absolute right-3 top-3 z-20 h-12 w-12 rounded-xl border border-slate-300 bg-white text-slate-700 shadow-sm disabled:opacity-40 flex items-center justify-center"
+                title="로드뷰 보기"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-6 w-6"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <circle cx="12" cy="7" r="3.5" />
+                  <path d="M12 11v7" />
+                  <path d="M8 21h8" />
+                </svg>
+              </button>
+              <Map
+                center={mapCenter}
+                mapTypeId={mapTypeId}
+                style={{ width: "100%", height: "100%" }}
+                level={3}
+                onCreate={() => setKakaoMapReady(true)}
+              >
+                {pinCoords && (
+                  <MapMarker
+                    position={pinCoords}
+                    onClick={() => {
+                      setViewMode('roadview');
+                      setRoadviewFailed(false);
+                    }}
+                  />
+                )}
+              </Map>
+            </>
+          )}
         </div>
       </Card>
     );

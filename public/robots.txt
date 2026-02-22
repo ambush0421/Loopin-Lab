@@ -1,0 +1,28 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /privacy
+Disallow: /terms
+
+# AI 크롤러 — GEO (Generative Engine Optimization)
+User-agent: GPTBot
+Allow: /
+Disallow: /api/
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Amazonbot
+Allow: /
+
+# 사이트맵
+Sitemap: https://building-report.pro/sitemap.xml
