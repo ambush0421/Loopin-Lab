@@ -65,7 +65,9 @@ async function fetchBuildingGeneral(sigunguCd: string, bjdongCd: string, bun: st
             fmlyCnt: Number(item.fmlyCnt || 0),
             engyEffcGradCd: item.engyEffcGradCd || "",
         };
-    } catch { return null; }
+    } catch (e: any) {
+        return { __error: e.message };
+    }
 }
 
 /** 표제부 조회 */
@@ -85,7 +87,9 @@ async function fetchBuildingTitle(sigunguCd: string, bjdongCd: string, bun: stri
             platArea: Number(item.platArea || 0),
             archArea: Number(item.archArea || 0),
         };
-    } catch { return null; }
+    } catch (e: any) {
+        return { __error: e.message };
+    }
 }
 
 /** 전유부 조회 */
@@ -133,8 +137,13 @@ export async function GET(request: NextRequest) {
             fetchBuildingExposArea(sigunguCd, bjdongCd, bun, ji)
         ]);
 
+        const errGroup = [summary, title, rooms].find((r: any) => r?.__error);
+        if (errGroup) {
+            return NextResponse.json({ success: false, error: `공공데이터 API 에러: ${errGroup.__error}` });
+        }
+
         if (!summary && !title) {
-            return NextResponse.json({ success: false, error: '건축물대장 정보를 찾을 수 없습니다.' });
+            return NextResponse.json({ success: false, error: '건축물대장 정보를 찾을 수 없습니다. (데이터 없음)' });
         }
 
         const mergedSummary = { ...title, ...summary };
