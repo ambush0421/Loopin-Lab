@@ -8,9 +8,9 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "npm run pages:build",
+    "build": "npx @cloudflare/next-on-pages",
     "build:local": "node ./scripts/build.mjs",
-    "pages:build": "node scripts/pages-build.mjs",
+    "pages:build": "npx @cloudflare/next-on-pages",
     "pages:deploy": "npm run pages:build && npx --yes wrangler pages deploy .vercel/output/static --project-name building-report-pro",
     "pages:deploy:ci": "npm run pages:build && npx --yes wrangler pages deploy .vercel/output/static --project-name building-report-pro --branch main",
     "start": "next start",
