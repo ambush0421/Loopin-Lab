@@ -23,9 +23,20 @@ async function fetchFromApi(endpoint: string, params: Record<string, string>) {
     const url = `${BASE_URL}${endpoint}?serviceKey=${serviceKey}&${searchParams.toString()}`;
     const res = await fetch(url);
     if (!res.ok) {
-        throw new Error(`API fetch failed: ${res.statusText}`);
+        throw new Error(`API fetch HTTP Error: ${res.status} ${res.statusText}`);
     }
-    return res.json();
+
+    const text = await res.text();
+    if (!text || text.trim() === '') {
+        throw new Error(`API 응답 본문이 비어 있습니다 (Status: ${res.status}). 요청 정보: ${endpoint}`);
+    }
+
+    try {
+        return JSON.parse(text);
+    } catch (e: any) {
+        const preview = text.substring(0, 200).replace(/\n/g, '');
+        throw new Error(`JSON 파싱 에러: ${e.message} | 미리보기: ${preview}`);
+    }
 }
 
 /** 총괄표제부 조회 */
