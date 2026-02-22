@@ -137,8 +137,8 @@ export async function GET(request: NextRequest) {
             fetchBuildingExposArea(sigunguCd, bjdongCd, bun, ji)
         ]);
 
-        const errGroup = [summary, title, rooms].find((r: any) => r?.__error);
-        if (errGroup) {
+        const errGroup: any = [summary, title, rooms].find((r: any) => r && typeof r === 'object' && '__error' in r);
+        if (errGroup && errGroup.__error) {
             return NextResponse.json({ success: false, error: `공공데이터 API 에러: ${errGroup.__error}` });
         }
 
