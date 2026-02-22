@@ -90,7 +90,7 @@ function clientReverseGeocode(coords: Coordinates): Promise<{
 }
 
 // ─── 클라이언트 카카오 Geocoder를 이용한 장소/주소 검색 ───
-function clientSearchAddress(query: string): Promise<{ lat: number; lng: number; address: string; placeName: string; bcode: string } | null> {
+function clientSearchAddress(query: string): Promise<{ lat: number; lng: number; address: string; placeName: string; bcode: string; sigunguCd: string; bjdongCd: string; bun: string; ji: string } | null> {
     return new Promise((resolve) => {
         const kakao = (window as any).kakao;
         if (!kakao?.maps?.services) {
@@ -101,26 +101,31 @@ function clientSearchAddress(query: string): Promise<{ lat: number; lng: number;
         const ps = new kakao.maps.services.Places();
         const geocoder = new kakao.maps.services.Geocoder();
 
-        ps.keywordSearch(query, (data: any[], status: string) => {
-            if (status === kakao.maps.services.Status.OK && data.length > 0) {
-                const item = data[0];
+        geocoder.addressSearch(query, (result: any[], status: string) => {
+            if (status === kakao.maps.services.Status.OK && result.length > 0) {
+                const item = result[0];
+                const bcode = item.address?.b_code || '';
                 resolve({
                     lat: parseFloat(item.y),
                     lng: parseFloat(item.x),
-                    address: item.road_address_name || item.address_name || query,
-                    placeName: item.place_name || query,
-                    bcode: ''
+                    address: item.road_address?.address_name || item.address?.address_name || query,
+                    placeName: item.road_address?.building_name || query,
+                    bcode: bcode,
+                    sigunguCd: bcode.substring(0, 5),
+                    bjdongCd: bcode.substring(5, 10),
+                    bun: (item.address?.main_address_no || '0').padStart(4, '0'),
+                    ji: (item.address?.sub_address_no || '0').padStart(4, '0')
                 });
             } else {
-                geocoder.addressSearch(query, (result: any[], status: string) => {
-                    if (status === kakao.maps.services.Status.OK && result.length > 0) {
-                        const item = result[0];
+                ps.keywordSearch(query, (data: any[], status: string) => {
+                    if (status === kakao.maps.services.Status.OK && data.length > 0) {
+                        const item = data[0];
                         resolve({
                             lat: parseFloat(item.y),
                             lng: parseFloat(item.x),
-                            address: item.road_address?.address_name || item.address?.address_name || query,
-                            placeName: item.road_address?.building_name || query,
-                            bcode: item.address?.b_code || ''
+                            address: item.road_address_name || item.address_name || query,
+                            placeName: item.place_name || query,
+                            bcode: '', sigunguCd: '', bjdongCd: '', bun: '', ji: ''
                         });
                     } else {
                         resolve(null);
@@ -267,14 +272,20 @@ function ExploreMapContent() {
 
             try {
                 // 1. 클라이언트 Geocoder로 먼저 검색 시도
-                let clientResult = await clientSearchAddress(query);
+                const clientResult = await clientSearchAddress(query);
                 let coords: Coordinates;
                 let codes: any = null;
                 let buildingData: any = null;
 
                 if (clientResult) {
                     coords = { lat: clientResult.lat, lng: clientResult.lng };
-                    codes = { bcode: clientResult.bcode };
+                    codes = {
+                        bcode: clientResult.bcode,
+                        sigunguCd: clientResult.sigunguCd,
+                        bjdongCd: clientResult.bjdongCd,
+                        bun: clientResult.bun,
+                        ji: clientResult.ji,
+                    };
                     buildingData = {
                         address: clientResult.address,
                         placeName: clientResult.placeName
