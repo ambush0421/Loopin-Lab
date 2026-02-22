@@ -9,6 +9,8 @@ import { useBuildingStore } from '@/stores/buildingStore';
 import { useRoomStore } from '@/stores/roomStore';
 import { useMapStore } from '@/stores/mapStore';
 
+export const runtime = 'edge';
+
 interface AnalyzePageProps {
     params: Promise<{ id: string }>;
 }
